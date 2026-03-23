@@ -82,3 +82,22 @@ final appThemeTypeProvider = Provider<AppThemeType>((ref) {
   final settings = ref.watch(userSettingsControllerProvider);
   return settings.valueOrNull?.selectedTheme ?? AppThemeType.sage;
 });
+
+final appTextScaleFactorProvider = Provider<double>((ref) {
+  final settings = ref.watch(userSettingsControllerProvider);
+  final textSize = settings.valueOrNull?.textSize ?? AppTextSize.medium;
+
+  switch (textSize) {
+    case AppTextSize.small:
+      return 0.94;
+    case AppTextSize.medium:
+      return 1.0;
+    case AppTextSize.large:
+      return 1.1;
+  }
+});
+
+final appShareFormatProvider = Provider<ShareFormatType>((ref) {
+  final settings = ref.watch(userSettingsControllerProvider);
+  return settings.valueOrNull?.defaultShareFormat ?? ShareFormatType.full;
+});

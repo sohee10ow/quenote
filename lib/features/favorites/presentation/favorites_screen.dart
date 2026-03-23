@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../home/application/home_providers.dart';
 import '../../sequence/application/sequence_providers.dart';
 import '../../sequence/domain/entities/sequence.dart';
 import '../../sequence/presentation/args/sequence_route_args.dart';
@@ -102,6 +103,7 @@ class FavoritesScreen extends ConsumerWidget {
       ref.invalidate(sequenceListProvider);
       ref.invalidate(favoriteSequenceListProvider);
       ref.invalidate(recentSequenceListProvider);
+      ref.invalidate(homeOverviewProvider);
       HapticFeedback.lightImpact();
     } catch (_) {
       if (!context.mounted) {

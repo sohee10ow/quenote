@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/components/buttons/primary_button.dart';
+import '../../../home/application/home_providers.dart';
 import '../../application/sequence_providers.dart';
 import '../../domain/entities/sequence_step.dart';
 
@@ -100,7 +101,9 @@ class _StepReorderScreenState extends ConsumerState<StepReorderScreen> {
       ref.invalidate(sequenceStepsProvider(widget.sequenceId));
       ref.invalidate(sequenceByIdProvider(widget.sequenceId));
       ref.invalidate(sequenceListProvider);
+      ref.invalidate(favoriteSequenceListProvider);
       ref.invalidate(recentSequenceListProvider);
+      ref.invalidate(homeOverviewProvider);
 
       if (mounted) {
         HapticFeedback.lightImpact();

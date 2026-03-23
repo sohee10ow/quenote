@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../home/application/home_providers.dart';
 import '../../application/sequence_providers.dart';
 import '../../domain/entities/sequence.dart';
 import '../args/sequence_route_args.dart';
@@ -296,6 +297,7 @@ class _SequenceListScreenState extends ConsumerState<SequenceListScreen> {
       ref.invalidate(sequenceListProvider);
       ref.invalidate(favoriteSequenceListProvider);
       ref.invalidate(recentSequenceListProvider);
+      ref.invalidate(homeOverviewProvider);
     } catch (_) {
       if (!context.mounted) {
         return;

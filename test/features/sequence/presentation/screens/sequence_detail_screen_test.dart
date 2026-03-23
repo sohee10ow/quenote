@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quenote/app/init/app_startup_controller.dart';
 import 'package:quenote/app/router/app_routes.dart';
 import 'package:quenote/app/theme/app_theme.dart';
 import 'package:quenote/features/sequence/application/sequence_providers.dart';
@@ -12,6 +13,7 @@ import 'package:quenote/features/sequence/domain/entities/sequence_step.dart';
 import 'package:quenote/features/sequence/domain/enums/sequence_level.dart';
 import 'package:quenote/features/sequence/domain/enums/side_type.dart';
 import 'package:quenote/features/sequence/presentation/screens/sequence_detail_screen.dart';
+import 'package:quenote/features/settings/domain/enums/share_format_type.dart';
 import 'package:quenote/features/settings/domain/enums/app_theme_type.dart';
 
 void main() {
@@ -106,15 +108,50 @@ void main() {
     expect(repository.deleteCallCount, 1);
     expect(find.text('목록 화면'), findsOneWidget);
   });
+
+  testWidgets('기본 공유 형식이 짧게면 텍스트 복사 결과가 짧은 형식으로 바뀐다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: _sampleSteps(),
+    );
+    String? copiedText;
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (methodCall) async {
+          if (methodCall.method == 'Clipboard.setData') {
+            copiedText = (methodCall.arguments as Map)['text'] as String?;
+          }
+          return null;
+        });
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const SequenceDetailScreen(sequenceId: 1),
+        shareFormat: ShareFormatType.short,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('텍스트 복사'));
+    await tester.pumpAndSettle();
+
+    expect(copiedText, '아침 활력 요가\n2개 동작\n1. 다운독\n2. 전사 1');
+    await tester.pump(const Duration(seconds: 2));
+  });
 }
 
 Widget _buildTestApp({
   required SequenceRepository repository,
   required Widget child,
   RouteFactory? onGenerateRoute,
+  ShareFormatType shareFormat = ShareFormatType.full,
 }) {
   return ProviderScope(
-    overrides: [sequenceRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+      sequenceRepositoryProvider.overrideWithValue(repository),
+      appShareFormatProvider.overrideWithValue(shareFormat),
+    ],
     child: MaterialApp(
       theme: AppTheme.fromType(AppThemeType.sage),
       home: child,

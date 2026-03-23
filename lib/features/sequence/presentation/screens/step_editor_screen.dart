@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../home/application/home_providers.dart';
 import '../../application/sequence_providers.dart';
 import '../../application/step_editor_draft.dart';
 import '../../data/local/step_image_storage.dart';
@@ -1072,7 +1073,9 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
       ref.invalidate(sequenceByIdProvider(widget.sequenceId));
       ref.invalidate(sequenceListProvider);
       ref.invalidate(sequenceStepCountsProvider);
+      ref.invalidate(favoriteSequenceListProvider);
       ref.invalidate(recentSequenceListProvider);
+      ref.invalidate(homeOverviewProvider);
 
       if (mounted) {
         HapticFeedback.lightImpact();
@@ -1179,7 +1182,9 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
       ref.invalidate(sequenceByIdProvider(widget.sequenceId));
       ref.invalidate(sequenceListProvider);
       ref.invalidate(sequenceStepCountsProvider);
+      ref.invalidate(favoriteSequenceListProvider);
       ref.invalidate(recentSequenceListProvider);
+      ref.invalidate(homeOverviewProvider);
 
       if (mounted) {
         HapticFeedback.lightImpact();

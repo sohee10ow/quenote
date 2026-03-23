@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/init/app_startup_controller.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
@@ -10,6 +11,7 @@ import '../../application/sequence_providers.dart';
 import '../../domain/entities/sequence.dart';
 import '../../domain/entities/sequence_step.dart';
 import '../../domain/enums/side_type.dart';
+import '../../../settings/domain/enums/share_format_type.dart';
 import '../args/sequence_route_args.dart';
 
 class SequenceDetailScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
   Widget build(BuildContext context) {
     final sequenceAsync = ref.watch(sequenceByIdProvider(widget.sequenceId));
     final stepsAsync = ref.watch(sequenceStepsProvider(widget.sequenceId));
+    final shareFormat = ref.watch(appShareFormatProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -65,7 +68,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
               return const Center(child: Text('불러오기에 실패했습니다.'));
             }
 
-            return _buildContent(context, sequence, steps);
+            return _buildContent(context, sequence, steps, shareFormat);
           },
         ),
       ),
@@ -76,9 +79,11 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
     BuildContext context,
     Sequence sequence,
     List<SequenceStep> steps,
+    ShareFormatType shareFormat,
   ) {
     final theme = Theme.of(context);
     final cueNoteCount = steps.where(_hasCueNote).length;
+    final shareText = _buildShareText(sequence, steps, shareFormat);
 
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -100,8 +105,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
                   icon: _copySuccess
                       ? CupertinoIcons.check_mark
                       : CupertinoIcons.doc_on_doc,
-                  onTap: () =>
-                      _copyShareText(context, _buildShareText(sequence, steps)),
+                  onTap: () => _copyShareText(context, shareText),
                   isAccent: _copySuccess,
                 ),
               ),
@@ -110,7 +114,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
                 child: _ActionButton(
                   label: '공유',
                   icon: CupertinoIcons.share,
-                  onTap: () => _openSharePreview(context, sequence, steps),
+                  onTap: () => _openSharePreview(context, shareText),
                   isPrimary: true,
                 ),
               ),
@@ -215,14 +219,8 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
     });
   }
 
-  Future<void> _openSharePreview(
-    BuildContext context,
-    Sequence sequence,
-    List<SequenceStep> steps,
-  ) async {
-    final controller = TextEditingController(
-      text: _buildShareText(sequence, steps),
-    );
+  Future<void> _openSharePreview(BuildContext context, String shareText) async {
+    final controller = TextEditingController(text: shareText);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -349,7 +347,22 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
     return parts.join(' · ');
   }
 
-  String _buildShareText(Sequence sequence, List<SequenceStep> steps) {
+  String _buildShareText(
+    Sequence sequence,
+    List<SequenceStep> steps,
+    ShareFormatType format,
+  ) {
+    switch (format) {
+      case ShareFormatType.full:
+        return _buildFullShareText(sequence, steps);
+      case ShareFormatType.cues:
+        return _buildCueShareText(sequence, steps);
+      case ShareFormatType.short:
+        return _buildShortShareText(sequence, steps);
+    }
+  }
+
+  String _buildFullShareText(Sequence sequence, List<SequenceStep> steps) {
     final buffer = StringBuffer()..writeln(sequence.title);
 
     if (sequence.tags.isNotEmpty) {
@@ -394,6 +407,49 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
       }
 
       buffer.writeln();
+    }
+
+    return buffer.toString().trimRight();
+  }
+
+  String _buildCueShareText(Sequence sequence, List<SequenceStep> steps) {
+    final buffer = StringBuffer()
+      ..writeln(sequence.title)
+      ..writeln();
+
+    for (var index = 0; index < steps.length; index++) {
+      final step = steps[index];
+      buffer.writeln('${index + 1}. ${step.poseName}');
+
+      if (step.preparationCue.trim().isNotEmpty) {
+        buffer.writeln('준비: ${step.preparationCue.trim()}');
+      }
+
+      for (final cue in step.breathCues) {
+        final text = cue.text.trim();
+        if (text.isEmpty) {
+          continue;
+        }
+        buffer.writeln('${cue.breathIndex}호흡: $text');
+      }
+
+      if (step.releaseCue.trim().isNotEmpty) {
+        buffer.writeln('마무리: ${step.releaseCue.trim()}');
+      }
+
+      buffer.writeln();
+    }
+
+    return buffer.toString().trimRight();
+  }
+
+  String _buildShortShareText(Sequence sequence, List<SequenceStep> steps) {
+    final buffer = StringBuffer()
+      ..writeln(sequence.title)
+      ..writeln('${steps.length}개 동작');
+
+    for (var index = 0; index < steps.length; index++) {
+      buffer.writeln('${index + 1}. ${steps[index].poseName}');
     }
 
     return buffer.toString().trimRight();
