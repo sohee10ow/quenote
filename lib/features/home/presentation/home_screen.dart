@@ -25,7 +25,9 @@ class HomeScreen extends ConsumerWidget {
               Navigator.of(context).pushNamed(AppRoutes.sequenceEditor);
             },
             onOpenSequenceList: () {
-              Navigator.of(context).pushNamed(AppRoutes.sequenceList);
+              Navigator.of(
+                context,
+              ).pushReplacementNamed(AppRoutes.sequenceList);
             },
             onOpenSequenceDetail: (sequenceId) {
               Navigator.of(context).pushNamed(
@@ -133,10 +135,11 @@ class _HomeContent extends StatelessWidget {
             title: _greeting(),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-          child: _QuickCreateCard(onTap: onOpenSequenceEditor),
-        ),
+        if (overview.hasSequences)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+            child: _QuickCreateCard(onTap: onOpenSequenceEditor),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
           child: Column(

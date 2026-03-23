@@ -44,8 +44,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('아침 활력 요가'), findsOneWidget);
-    expect(find.text('편집'), findsOneWidget);
-    expect(find.text('복사'), findsOneWidget);
+    expect(find.text('편집'), findsNothing);
+    expect(find.text('텍스트 복사'), findsOneWidget);
     expect(find.text('공유'), findsOneWidget);
     expect(find.text('수업 노트'), findsOneWidget);
     expect(find.text('동작 순서'), findsOneWidget);

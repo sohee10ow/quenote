@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/isar_provider.dart';
 import '../../features/settings/data/local/isar_user_settings.dart';
 import '../../features/settings/domain/entities/user_settings.dart';
+import '../../features/settings/domain/enums/app_text_size.dart';
 import '../../features/settings/domain/enums/app_theme_type.dart';
+import '../../features/settings/domain/enums/share_format_type.dart';
 
 final userSettingsControllerProvider =
     AsyncNotifierProvider<UserSettingsController, UserSettings>(
@@ -34,6 +36,26 @@ class UserSettingsController extends AsyncNotifier<UserSettings> {
       return;
     }
     final next = current.copyWith(selectedTheme: theme);
+    await _persist(next);
+    state = AsyncData(next);
+  }
+
+  Future<void> setTextSize(AppTextSize textSize) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    final next = current.copyWith(textSize: textSize);
+    await _persist(next);
+    state = AsyncData(next);
+  }
+
+  Future<void> setShareFormat(ShareFormatType shareFormat) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    final next = current.copyWith(defaultShareFormat: shareFormat);
     await _persist(next);
     state = AsyncData(next);
   }

@@ -7,7 +7,6 @@ import '../../features/shell/presentation/app_shell_screen.dart';
 import '../../features/sequence/presentation/args/sequence_route_args.dart';
 import '../../features/sequence/presentation/screens/sequence_detail_screen.dart';
 import '../../features/sequence/presentation/screens/sequence_editor_screen.dart';
-import '../../features/sequence/presentation/screens/sequence_list_screen.dart';
 import '../../features/sequence/presentation/screens/step_detail_screen.dart';
 import '../../features/sequence/presentation/screens/step_editor_screen.dart';
 import '../../features/sequence/presentation/screens/step_reorder_screen.dart';
@@ -28,7 +27,7 @@ class AppRouter {
       case AppRoutes.sequenceEditor:
         return _cupertino(const SequenceEditorScreen(), settings);
       case AppRoutes.sequenceList:
-        return _cupertino(const SequenceListScreen(), settings);
+        return _cupertino(const AppShellScreen(initialIndex: 1), settings);
       case AppRoutes.sequenceDetail:
         final args = settings.arguments as SequenceDetailRouteArgs;
         return _cupertino(

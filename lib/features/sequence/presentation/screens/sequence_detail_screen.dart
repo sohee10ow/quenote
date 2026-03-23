@@ -96,15 +96,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
             children: [
               Expanded(
                 child: _ActionButton(
-                  label: '편집',
-                  icon: CupertinoIcons.pencil,
-                  onTap: () => _showNotReadyMessage(context),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: _ActionButton(
-                  label: _copySuccess ? '복사됨' : '복사',
+                  label: _copySuccess ? '복사됨' : '텍스트 복사',
                   icon: _copySuccess
                       ? CupertinoIcons.check_mark
                       : CupertinoIcons.doc_on_doc,
@@ -316,12 +308,6 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
         setState(() => _deleting = false);
       }
     }
-  }
-
-  void _showNotReadyMessage(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('시퀀스 정보 편집은 준비 중입니다.')));
   }
 
   bool _hasCueNote(SequenceStep step) {
