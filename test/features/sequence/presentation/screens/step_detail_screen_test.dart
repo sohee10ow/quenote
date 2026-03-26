@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quenote/app/init/app_startup_controller.dart';
 import 'package:quenote/app/router/app_routes.dart';
 import 'package:quenote/app/theme/app_theme.dart';
 import 'package:quenote/features/sequence/application/sequence_providers.dart';
@@ -11,6 +12,7 @@ import 'package:quenote/features/sequence/domain/entities/sequence.dart';
 import 'package:quenote/features/sequence/domain/entities/sequence_step.dart';
 import 'package:quenote/features/sequence/domain/enums/sequence_level.dart';
 import 'package:quenote/features/sequence/domain/enums/side_type.dart';
+import 'package:quenote/features/sequence/presentation/args/sequence_route_args.dart';
 import 'package:quenote/features/sequence/presentation/screens/step_detail_screen.dart';
 import 'package:quenote/features/settings/domain/enums/app_theme_type.dart';
 
@@ -64,10 +66,72 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(CupertinoIcons.pencil));
+    await tester.tap(find.byIcon(CupertinoIcons.ellipsis_circle));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('수정'));
     await tester.pumpAndSettle();
 
     expect(find.text('편집 화면'), findsOneWidget);
+  });
+
+  testWidgets('동작 복제 메뉴에서 3가지 복제 경로를 보여준다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: [_sampleStructuredStep()],
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const StepDetailScreen(sequenceId: 1, stepId: 10),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(CupertinoIcons.ellipsis_circle));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('동작 복제'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('현재 시퀀스에 넣기'), findsOneWidget);
+    expect(find.text('새로운 시퀀스에 넣기'), findsOneWidget);
+    expect(find.text('다른 시퀀스에 넣기'), findsOneWidget);
+  });
+
+  testWidgets('새로운 시퀀스에 넣기를 선택하면 시퀀스 생성 화면으로 이동한다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: [_sampleStructuredStep()],
+    );
+    SequenceEditorRouteArgs? receivedArgs;
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const StepDetailScreen(sequenceId: 1, stepId: 10),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.sequenceEditor) {
+            receivedArgs = settings.arguments as SequenceEditorRouteArgs;
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const Scaffold(body: Text('시퀀스 생성 화면')),
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(CupertinoIcons.ellipsis_circle));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('동작 복제'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새로운 시퀀스에 넣기'));
+    await tester.pumpAndSettle();
+
+    expect(receivedArgs?.pendingDuplicateSourceStepId, 10);
+    expect(find.text('시퀀스 생성 화면'), findsOneWidget);
   });
 
   testWidgets('표시할 큐잉이 없으면 empty state를 보여준다', (tester) async {
@@ -95,7 +159,10 @@ Widget _buildTestApp({
   RouteFactory? onGenerateRoute,
 }) {
   return ProviderScope(
-    overrides: [sequenceRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+      sequenceRepositoryProvider.overrideWithValue(repository),
+      isProEnabledProvider.overrideWithValue(true),
+    ],
     child: MaterialApp(
       theme: AppTheme.fromType(AppThemeType.sage),
       home: child,

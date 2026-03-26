@@ -8,5 +8,6 @@ abstract final class AppRoutes {
   static const sequenceDetail = '/sequence-detail';
   static const stepDetail = '/step-detail';
   static const stepEditor = '/step-editor';
+  static const stepDuplicateTarget = '/step-duplicate-target';
   static const stepReorder = '/step-reorder';
 }

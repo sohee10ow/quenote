@@ -5,6 +5,7 @@ import 'package:quenote/app/app.dart';
 import 'package:quenote/app/init/app_startup_controller.dart';
 import 'package:quenote/app/router/app_router.dart';
 import 'package:quenote/features/settings/domain/entities/user_settings.dart';
+import 'package:quenote/features/settings/domain/enums/app_plan_type.dart';
 import 'package:quenote/features/settings/domain/enums/app_text_size.dart';
 import 'package:quenote/features/settings/domain/enums/app_theme_type.dart';
 import 'package:quenote/features/settings/domain/enums/share_format_type.dart';
@@ -13,6 +14,8 @@ void main() {
   testWidgets('텍스트 크기 설정이 앱 전역 MediaQuery에 반영된다', (tester) async {
     final controller = _FakeUserSettingsController(
       const UserSettings(
+        planType: AppPlanType.free,
+        betaProOverrideEnabled: false,
         selectedTheme: AppThemeType.sage,
         textSize: AppTextSize.large,
         defaultShareFormat: ShareFormatType.full,

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../home/application/home_providers.dart';
+import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
 import '../../domain/entities/sequence.dart';
 import '../../domain/entities/sequence_step.dart';
@@ -62,19 +64,188 @@ class StepDetailScreen extends ConsumerWidget {
               return const Center(child: Text('동작을 찾을 수 없습니다.'));
             }
 
-            return _StepDetailContent(sequence: sequence, step: step);
+            return _StepDetailContent(
+              sequence: sequence,
+              step: step,
+              onOpenMenu: () => _showActionMenu(context, ref, sequence, step),
+            );
           },
         ),
       ),
     );
   }
+
+  void _openStepEditor(BuildContext context, int sequenceId, int stepId) {
+    Navigator.of(context).pushNamed(
+      AppRoutes.stepEditor,
+      arguments: StepEditorRouteArgs(sequenceId: sequenceId, stepId: stepId),
+    );
+  }
+
+  Future<void> _showActionMenu(
+    BuildContext context,
+    WidgetRef ref,
+    Sequence sequence,
+    SequenceStep step,
+  ) async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) {
+        return CupertinoActionSheet(
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                _openStepEditor(context, sequence.id, step.id);
+              },
+              child: const Text('수정'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
+                await _showDuplicateOptions(context, ref, sequence, step);
+              },
+              child: const Text('동작 복제'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('취소'),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _duplicateStep(
+    BuildContext context,
+    WidgetRef ref,
+    Sequence sequence,
+    int stepId,
+  ) async {
+    try {
+      final repository = ref.read(sequenceRepositoryProvider);
+      final result = await repository.duplicateStepIntoSameSequence(stepId);
+
+      _invalidateSequenceCaches(ref, sequence.id, result.targetSequenceId);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushReplacementNamed(
+        AppRoutes.sequenceDetail,
+        arguments: SequenceDetailRouteArgs(
+          sequenceId: result.targetSequenceId,
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFE89D91),
+          content: Text('동작을 복제하지 못했습니다. 다시 시도해주세요.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showDuplicateOptions(
+    BuildContext context,
+    WidgetRef ref,
+    Sequence sequence,
+    SequenceStep step,
+  ) async {
+    final allowed = await ref
+        .read(proAccessGuardProvider)
+        .ensureFeatureAccess(context, ProFeature.stepDuplication);
+    if (!allowed || !context.mounted) {
+      return;
+    }
+
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) {
+        return CupertinoActionSheet(
+          title: const Text('동작 복제'),
+          message: const Text('복제할 위치를 선택하세요.'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
+                await _duplicateStep(
+                  context,
+                  ref,
+                  sequence,
+                  step.id,
+                );
+              },
+              child: const Text('현재 시퀀스에 넣기'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).pushNamed(
+                  AppRoutes.sequenceEditor,
+                  arguments: SequenceEditorRouteArgs(
+                    pendingDuplicateSourceStepId: step.id,
+                  ),
+                );
+              },
+              child: const Text('새로운 시퀀스에 넣기'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).pushNamed(
+                  AppRoutes.stepDuplicateTarget,
+                  arguments: StepDuplicateTargetRouteArgs(
+                    sourceSequenceId: sequence.id,
+                    sourceStepId: step.id,
+                  ),
+                );
+              },
+              child: const Text('다른 시퀀스에 넣기'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('취소'),
+          ),
+        );
+      },
+    );
+  }
+
+  void _invalidateSequenceCaches(
+    WidgetRef ref,
+    int sourceSequenceId,
+    int targetSequenceId,
+  ) {
+    ref.invalidate(sequenceStepsProvider(sourceSequenceId));
+    ref.invalidate(sequenceByIdProvider(sourceSequenceId));
+    ref.invalidate(sequenceStepsProvider(targetSequenceId));
+    ref.invalidate(sequenceByIdProvider(targetSequenceId));
+    ref.invalidate(sequenceListProvider);
+    ref.invalidate(sequenceStepCountsProvider);
+    ref.invalidate(favoriteSequenceListProvider);
+    ref.invalidate(recentSequenceListProvider);
+    ref.invalidate(homeOverviewProvider);
+  }
 }
 
 class _StepDetailContent extends StatelessWidget {
-  const _StepDetailContent({required this.sequence, required this.step});
+  const _StepDetailContent({
+    required this.sequence,
+    required this.step,
+    required this.onOpenMenu,
+  });
 
   final Sequence sequence;
   final SequenceStep step;
+  final VoidCallback onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +303,11 @@ class _StepDetailContent extends StatelessWidget {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.only(bottom: 32),
       children: [
-        _StepHeaderCard(sequence: sequence, step: step),
+        _StepHeaderCard(
+          sequence: sequence,
+          step: step,
+          onOpenMenu: onOpenMenu,
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           child: Column(
@@ -205,15 +380,7 @@ class _StepImageSection extends StatelessWidget {
                 File(path),
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) {
-                  return Center(
-                    child: Icon(
-                      CupertinoIcons.photo,
-                      size: 28,
-                      color: theme.textTheme.bodyMedium?.color?.withValues(
-                        alpha: 0.35,
-                      ),
-                    ),
-                  );
+                  return _MissingImagePlaceholder(theme: theme);
                 },
               ),
             ),
@@ -225,10 +392,15 @@ class _StepImageSection extends StatelessWidget {
 }
 
 class _StepHeaderCard extends StatelessWidget {
-  const _StepHeaderCard({required this.sequence, required this.step});
+  const _StepHeaderCard({
+    required this.sequence,
+    required this.step,
+    required this.onOpenMenu,
+  });
 
   final Sequence sequence;
   final SequenceStep step;
+  final VoidCallback onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -271,17 +443,9 @@ class _StepHeaderCard extends StatelessWidget {
                   },
                 ),
                 _CircleIconButton(
-                  icon: CupertinoIcons.pencil,
+                  icon: CupertinoIcons.ellipsis_circle,
                   filled: true,
-                  onTap: () {
-                    Navigator.of(context).pushNamed(
-                      AppRoutes.stepEditor,
-                      arguments: StepEditorRouteArgs(
-                        sequenceId: sequence.id,
-                        stepId: step.id,
-                      ),
-                    );
-                  },
+                  onTap: onOpenMenu,
                 ),
               ],
             ),
@@ -366,6 +530,37 @@ class _StepHeaderCard extends StatelessWidget {
       case SideType.none:
         return '없음';
     }
+  }
+}
+
+class _MissingImagePlaceholder extends StatelessWidget {
+  const _MissingImagePlaceholder({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.photo,
+              size: 28,
+              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.35),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              '이미지 파일을 찾을 수 없어요',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

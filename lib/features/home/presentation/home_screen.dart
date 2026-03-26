@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../pro/application/pro_access.dart';
 import '../../sequence/application/sequence_providers.dart';
 import '../../sequence/presentation/args/sequence_route_args.dart';
 import '../application/home_providers.dart';
@@ -21,9 +22,7 @@ class HomeScreen extends ConsumerWidget {
         child: overviewAsync.when(
           data: (overview) => _HomeContent(
             overview: overview,
-            onOpenSequenceEditor: () {
-              Navigator.of(context).pushNamed(AppRoutes.sequenceEditor);
-            },
+            onOpenSequenceEditor: () => _openCreateScreen(context, ref),
             onOpenSequenceList: () {
               Navigator.of(
                 context,
@@ -81,6 +80,17 @@ class HomeScreen extends ConsumerWidget {
         ),
       );
     }
+  }
+
+  Future<void> _openCreateScreen(BuildContext context, WidgetRef ref) async {
+    final allowed = await ref
+        .read(proAccessGuardProvider)
+        .ensureCanCreateSequence(context);
+    if (!allowed || !context.mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushNamed(AppRoutes.sequenceEditor);
   }
 }
 

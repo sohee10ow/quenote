@@ -7,6 +7,7 @@ import '../../features/shell/presentation/app_shell_screen.dart';
 import '../../features/sequence/presentation/args/sequence_route_args.dart';
 import '../../features/sequence/presentation/screens/sequence_detail_screen.dart';
 import '../../features/sequence/presentation/screens/sequence_editor_screen.dart';
+import '../../features/sequence/presentation/screens/step_duplicate_target_screen.dart';
 import '../../features/sequence/presentation/screens/step_detail_screen.dart';
 import '../../features/sequence/presentation/screens/step_editor_screen.dart';
 import '../../features/sequence/presentation/screens/step_reorder_screen.dart';
@@ -25,7 +26,8 @@ class AppRouter {
       case AppRoutes.shell:
         return _cupertino(const AppShellScreen(), settings);
       case AppRoutes.sequenceEditor:
-        return _cupertino(const SequenceEditorScreen(), settings);
+        final args = settings.arguments as SequenceEditorRouteArgs?;
+        return _cupertino(SequenceEditorScreen(args: args), settings);
       case AppRoutes.sequenceList:
         return _cupertino(const AppShellScreen(initialIndex: 1), settings);
       case AppRoutes.sequenceDetail:
@@ -44,6 +46,15 @@ class AppRouter {
         final args = settings.arguments as StepEditorRouteArgs;
         return _cupertino(
           StepEditorScreen(sequenceId: args.sequenceId, stepId: args.stepId),
+          settings,
+        );
+      case AppRoutes.stepDuplicateTarget:
+        final args = settings.arguments as StepDuplicateTargetRouteArgs;
+        return _cupertino(
+          StepDuplicateTargetScreen(
+            sourceSequenceId: args.sourceSequenceId,
+            sourceStepId: args.sourceStepId,
+          ),
           settings,
         );
       case AppRoutes.stepReorder:

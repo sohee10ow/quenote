@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quenote/app/init/app_startup_controller.dart';
 import 'package:quenote/app/theme/app_theme.dart';
 import 'package:quenote/features/sequence/application/sequence_providers.dart';
 import 'package:quenote/features/sequence/data/repositories/sequence_repository.dart';
@@ -114,7 +115,10 @@ Widget _buildTestApp({
   required Widget child,
 }) {
   return ProviderScope(
-    overrides: [sequenceRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+      sequenceRepositoryProvider.overrideWithValue(repository),
+      isProEnabledProvider.overrideWithValue(true),
+    ],
     child: MaterialApp(
       theme: AppTheme.fromType(AppThemeType.sage),
       home: _StepEditorTestHost(child: child),

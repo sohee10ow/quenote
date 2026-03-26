@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/isar_provider.dart';
 import '../../features/settings/data/local/isar_user_settings.dart';
 import '../../features/settings/domain/entities/user_settings.dart';
+import '../../features/settings/domain/enums/app_plan_type.dart';
 import '../../features/settings/domain/enums/app_text_size.dart';
 import '../../features/settings/domain/enums/app_theme_type.dart';
 import '../../features/settings/domain/enums/share_format_type.dart';
@@ -76,6 +77,26 @@ class UserSettingsController extends AsyncNotifier<UserSettings> {
       await isar.isarUserSettingsModels.put(settings.toIsar());
     });
   }
+
+  Future<void> setPlanType(AppPlanType planType) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    final next = current.copyWith(planType: planType);
+    await _persist(next);
+    state = AsyncData(next);
+  }
+
+  Future<void> setBetaProOverrideEnabled(bool enabled) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    final next = current.copyWith(betaProOverrideEnabled: enabled);
+    await _persist(next);
+    state = AsyncData(next);
+  }
 }
 
 final appThemeTypeProvider = Provider<AppThemeType>((ref) {
@@ -100,4 +121,10 @@ final appTextScaleFactorProvider = Provider<double>((ref) {
 final appShareFormatProvider = Provider<ShareFormatType>((ref) {
   final settings = ref.watch(userSettingsControllerProvider);
   return settings.valueOrNull?.defaultShareFormat ?? ShareFormatType.full;
+});
+
+final isProEnabledProvider = Provider<bool>((ref) {
+  final settings = ref.watch(userSettingsControllerProvider);
+  final current = settings.valueOrNull ?? const UserSettings.initial();
+  return current.planType == AppPlanType.pro || current.betaProOverrideEnabled;
 });

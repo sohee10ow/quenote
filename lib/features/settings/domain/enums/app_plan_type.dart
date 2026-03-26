@@ -1,0 +1,1 @@
+enum AppPlanType { free, pro }

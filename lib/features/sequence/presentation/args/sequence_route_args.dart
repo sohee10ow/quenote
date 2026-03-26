@@ -1,3 +1,9 @@
+class SequenceEditorRouteArgs {
+  const SequenceEditorRouteArgs({this.pendingDuplicateSourceStepId});
+
+  final int? pendingDuplicateSourceStepId;
+}
+
 class SequenceDetailRouteArgs {
   const SequenceDetailRouteArgs({required this.sequenceId});
 
@@ -22,4 +28,14 @@ class StepReorderRouteArgs {
   const StepReorderRouteArgs({required this.sequenceId});
 
   final int sequenceId;
+}
+
+class StepDuplicateTargetRouteArgs {
+  const StepDuplicateTargetRouteArgs({
+    required this.sourceSequenceId,
+    required this.sourceStepId,
+  });
+
+  final int sourceSequenceId;
+  final int sourceStepId;
 }

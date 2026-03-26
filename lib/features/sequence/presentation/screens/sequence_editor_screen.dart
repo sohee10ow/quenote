@@ -6,13 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
+import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
 import '../../domain/enums/sequence_level.dart';
 import '../args/sequence_route_args.dart';
 import '../widgets/sequence_editor_field.dart';
 
 class SequenceEditorScreen extends ConsumerStatefulWidget {
-  const SequenceEditorScreen({super.key});
+  const SequenceEditorScreen({super.key, this.args});
+
+  final SequenceEditorRouteArgs? args;
 
   @override
   ConsumerState<SequenceEditorScreen> createState() =>
@@ -29,6 +32,9 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
 
   bool get _canSave =>
       !_isSubmitting && _titleController.text.trim().isNotEmpty;
+
+  bool get _hasPendingStepDuplication =>
+      widget.args?.pendingDuplicateSourceStepId != null;
 
   bool get _isDirty =>
       _titleController.text.trim().isNotEmpty ||
@@ -114,7 +120,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
                       ),
                       const SizedBox(height: AppSpacing.xl),
                       Text(
-                        '새 시퀀스',
+                        _hasPendingStepDuplication ? '새 시퀀스 만들기' : '새 시퀀스',
                         style: theme.textTheme.displayLarge?.copyWith(
                           fontSize: 24,
                           height: 1.2,
@@ -162,6 +168,10 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
                             maxLength: 300,
                             minLines: 8,
                           ),
+                          if (_hasPendingStepDuplication) ...[
+                            const SizedBox(height: AppSpacing.lg),
+                            const _PendingStepDuplicationNotice(),
+                          ],
                         ],
                       ),
                     ),
@@ -237,12 +247,31 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
 
     final repository = ref.read(sequenceRepositoryProvider);
     try {
+      final allowed = await ref
+          .read(proAccessGuardProvider)
+          .ensureCanCreateSequence(context);
+      if (!allowed) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+        }
+        return;
+      }
+
       HapticFeedback.lightImpact();
-      final sequenceId = await repository.createSequence(
-        title: _titleController.text.trim(),
-        description: _noteController.text.trim(),
-        level: SequenceLevel.beginner,
-      );
+      final pendingStepId = widget.args?.pendingDuplicateSourceStepId;
+      final sequenceId = pendingStepId == null
+          ? await repository.createSequence(
+              title: _titleController.text.trim(),
+              description: _noteController.text.trim(),
+              level: SequenceLevel.beginner,
+            )
+          : (await repository.createSequenceAndDuplicateStep(
+                  sourceStepId: pendingStepId,
+                  title: _titleController.text.trim(),
+                  description: _noteController.text.trim(),
+                  level: SequenceLevel.beginner,
+                ))
+              .targetSequenceId;
 
       ref.invalidate(sequenceListProvider);
       ref.invalidate(recentSequenceListProvider);
@@ -272,6 +301,42 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
       setState(() => _isSubmitting = false);
       return;
     }
+  }
+}
+
+class _PendingStepDuplicationNotice extends StatelessWidget {
+  const _PendingStepDuplicationNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(CupertinoIcons.doc_on_doc, size: 18, color: primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '저장하면 새 시퀀스가 만들어지고, 선택한 동작이 이 시퀀스에 자동으로 복제됩니다.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontSize: 14,
+                height: 1.5,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

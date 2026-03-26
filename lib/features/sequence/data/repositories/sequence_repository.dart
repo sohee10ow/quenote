@@ -10,6 +10,7 @@ import '../local/isar_breath_cue_entry.dart';
 import '../local/isar_sequence.dart';
 import '../local/isar_sequence_step.dart';
 import '../local/step_image_storage.dart';
+import '../models/sequence_backup_snapshot.dart';
 
 class SequenceRepository {
   const SequenceRepository(this._read);
@@ -90,6 +91,11 @@ class SequenceRepository {
       return mapped;
     }
     return mapped.sublist(0, limit);
+  }
+
+  Future<int> countSequences() async {
+    final isar = await _db();
+    return isar.isarSequenceModels.count();
   }
 
   Future<int> createSequence({
@@ -247,6 +253,278 @@ class SequenceRepository {
     });
   }
 
+  Future<StepDuplicationResult> duplicateStepIntoSameSequence(int stepId) async {
+    final isar = await _db();
+    final step = await _requireStep(isar, stepId);
+    final copiedImagePaths = await _duplicateImagePaths(step.imagePaths);
+
+    try {
+      late int duplicatedStepId;
+      await isar.writeTxn(() async {
+        final steps = await isar.isarSequenceStepModels
+            .filter()
+            .sequenceIdEqualTo(step.sequenceId)
+            .findAll();
+        steps.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+
+        for (final item in steps.where(
+          (item) => item.orderIndex > step.orderIndex,
+        )) {
+          item.orderIndex += 1;
+          await isar.isarSequenceStepModels.put(item);
+        }
+
+        final duplicatedStep = _buildDuplicatedStepModel(
+          source: step,
+          sequenceId: step.sequenceId,
+          orderIndex: step.orderIndex + 1,
+          imagePaths: copiedImagePaths,
+        );
+
+        duplicatedStepId = await isar.isarSequenceStepModels.put(
+          duplicatedStep,
+        );
+        await _touchSequence(isar, step.sequenceId);
+      });
+
+      return StepDuplicationResult(
+        targetSequenceId: step.sequenceId,
+        newStepId: duplicatedStepId,
+      );
+    } catch (_) {
+      await stepImageStorage.deleteFiles(copiedImagePaths);
+      rethrow;
+    }
+  }
+
+  Future<StepDuplicationResult> duplicateStepIntoSequence({
+    required int stepId,
+    required int targetSequenceId,
+  }) async {
+    final isar = await _db();
+    final step = await _requireStep(isar, stepId);
+
+    if (step.sequenceId == targetSequenceId) {
+      return duplicateStepIntoSameSequence(stepId);
+    }
+
+    final targetSequence = await isar.isarSequenceModels.get(targetSequenceId);
+    if (targetSequence == null) {
+      throw StateError('대상 시퀀스를 찾을 수 없습니다.');
+    }
+
+    final copiedImagePaths = await _duplicateImagePaths(step.imagePaths);
+
+    try {
+      late int duplicatedStepId;
+      await isar.writeTxn(() async {
+        final duplicatedStep = _buildDuplicatedStepModel(
+          source: step,
+          sequenceId: targetSequenceId,
+          orderIndex: await _nextOrderIndex(isar, targetSequenceId),
+          imagePaths: copiedImagePaths,
+        );
+
+        duplicatedStepId = await isar.isarSequenceStepModels.put(
+          duplicatedStep,
+        );
+        await _touchSequence(isar, targetSequenceId);
+      });
+
+      return StepDuplicationResult(
+        targetSequenceId: targetSequenceId,
+        newStepId: duplicatedStepId,
+      );
+    } catch (_) {
+      await stepImageStorage.deleteFiles(copiedImagePaths);
+      rethrow;
+    }
+  }
+
+  Future<StepDuplicationResult> createSequenceAndDuplicateStep({
+    required int sourceStepId,
+    required String title,
+    String? description,
+    SequenceLevel level = SequenceLevel.beginner,
+    List<String> tags = const <String>[],
+  }) async {
+    final isar = await _db();
+    final step = await _requireStep(isar, sourceStepId);
+    final copiedImagePaths = await _duplicateImagePaths(step.imagePaths);
+
+    try {
+      late int sequenceId;
+      late int duplicatedStepId;
+      await isar.writeTxn(() async {
+        final now = DateTime.now();
+        final sequence = IsarSequenceModel()
+          ..title = title
+          ..description = _nullIfEmpty(description)
+          ..level = level.name
+          ..tags = tags
+              .where((tag) => tag.trim().isNotEmpty)
+              .toList(growable: false)
+          ..isFavorite = false
+          ..createdAt = now
+          ..updatedAt = now;
+
+        sequenceId = await isar.isarSequenceModels.put(sequence);
+
+        final duplicatedStep = _buildDuplicatedStepModel(
+          source: step,
+          sequenceId: sequenceId,
+          orderIndex: 0,
+          imagePaths: copiedImagePaths,
+        );
+        duplicatedStepId = await isar.isarSequenceStepModels.put(
+          duplicatedStep,
+        );
+      });
+
+      return StepDuplicationResult(
+        targetSequenceId: sequenceId,
+        newStepId: duplicatedStepId,
+      );
+    } catch (_) {
+      await stepImageStorage.deleteFiles(copiedImagePaths);
+      rethrow;
+    }
+  }
+
+  Future<int> duplicateSequence(int sequenceId) async {
+    final isar = await _db();
+    final sequence = await isar.isarSequenceModels.get(sequenceId);
+    if (sequence == null) {
+      throw StateError('시퀀스를 찾을 수 없습니다.');
+    }
+
+    final steps = await isar.isarSequenceStepModels
+        .filter()
+        .sequenceIdEqualTo(sequenceId)
+        .findAll();
+    steps.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+
+    final duplicatedImagePaths = <String>[];
+    final duplicatedStepImages = <int, List<String>>{};
+
+    try {
+      for (final step in steps) {
+        final copied = await _duplicateImagePaths(step.imagePaths);
+        duplicatedStepImages[step.id] = copied;
+        duplicatedImagePaths.addAll(copied);
+      }
+
+      final now = DateTime.now();
+      late int duplicatedSequenceId;
+
+      await isar.writeTxn(() async {
+        final duplicatedSequence = IsarSequenceModel()
+          ..title = _duplicateTitle(sequence.title)
+          ..description = sequence.description
+          ..level = sequence.level
+          ..tags = List<String>.from(sequence.tags)
+          ..isFavorite = false
+          ..createdAt = now
+          ..updatedAt = now;
+
+        duplicatedSequenceId = await isar.isarSequenceModels.put(
+          duplicatedSequence,
+        );
+
+        for (final step in steps) {
+          final duplicatedStep = IsarSequenceStepModel()
+            ..sequenceId = duplicatedSequenceId
+            ..orderIndex = step.orderIndex
+            ..poseName = step.poseName
+            ..sanskritName = step.sanskritName
+            ..sideType = step.sideType
+            ..isBalancePose = step.isBalancePose
+            ..breathCount = step.breathCount
+            ..preparationCue = step.preparationCue
+            ..breathCues = _cloneBreathCues(step.breathCues)
+            ..releaseCue = step.releaseCue
+            ..cautionNote = step.cautionNote
+            ..beginnerModificationNote = step.beginnerModificationNote
+            ..imagePaths = duplicatedStepImages[step.id] ?? <String>[]
+            ..createdAt = now
+            ..updatedAt = now;
+          await isar.isarSequenceStepModels.put(duplicatedStep);
+        }
+      });
+
+      return duplicatedSequenceId;
+    } catch (_) {
+      await stepImageStorage.deleteFiles(duplicatedImagePaths);
+      rethrow;
+    }
+  }
+
+  Future<int> duplicateStep(int stepId) async {
+    final result = await duplicateStepIntoSameSequence(stepId);
+    return result.newStepId;
+  }
+
+  Future<void> replaceAllFromBackup(SequenceBackupSnapshot snapshot) async {
+    final isar = await _db();
+    final existingSteps = await isar.isarSequenceStepModels.where().findAll();
+    final existingImagePaths = existingSteps
+        .expand((step) => step.imagePaths)
+        .toList(growable: false);
+
+    await isar.writeTxn(() async {
+      await isar.isarSequenceStepModels.clear();
+      await isar.isarSequenceModels.clear();
+
+      for (final sequence in snapshot.sequences) {
+        final sequenceModel = IsarSequenceModel()
+          ..title = sequence.title
+          ..description = _nullIfEmpty(sequence.description)
+          ..level = sequence.level
+          ..tags = sequence.tags
+          ..isFavorite = sequence.isFavorite
+          ..createdAt = sequence.createdAt
+          ..updatedAt = sequence.updatedAt;
+
+        final sequenceId = await isar.isarSequenceModels.put(sequenceModel);
+
+        final orderedSteps = List<SequenceBackupStep>.from(sequence.steps)
+          ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+
+        for (var index = 0; index < orderedSteps.length; index++) {
+          final step = orderedSteps[index];
+          final stepModel = IsarSequenceStepModel()
+            ..sequenceId = sequenceId
+            ..orderIndex = index
+            ..poseName = step.poseName
+            ..sanskritName = _nullIfEmpty(step.sanskritName)
+            ..sideType = step.sideType
+            ..isBalancePose = step.isBalancePose
+            ..breathCount = step.breathCount
+            ..preparationCue = step.preparationCue
+            ..breathCues = step.breathCues
+                .map(
+                  (cue) => IsarBreathCueEntryModel(
+                    breathIndex: cue.breathIndex,
+                    text: cue.text,
+                  ),
+                )
+                .toList(growable: false)
+            ..releaseCue = step.releaseCue
+            ..cautionNote = _nullIfEmpty(step.cautionNote)
+            ..beginnerModificationNote = _nullIfEmpty(
+              step.beginnerModificationNote,
+            )
+            ..imagePaths = <String>[]
+            ..createdAt = step.createdAt
+            ..updatedAt = step.updatedAt;
+          await isar.isarSequenceStepModels.put(stepModel);
+        }
+      }
+    });
+
+    await stepImageStorage.deleteFiles(existingImagePaths);
+  }
+
   Future<int> _nextOrderIndex(Isar isar, int sequenceId) async {
     final steps = await isar.isarSequenceStepModels
         .filter()
@@ -312,4 +590,79 @@ class SequenceRepository {
     }
     return trimmed;
   }
+
+  Future<List<String>> _duplicateImagePaths(List<String> imagePaths) async {
+    final duplicated = <String>[];
+    for (final path in imagePaths) {
+      final copiedPath = await stepImageStorage.copyToAppStorageIfExists(path);
+      if (copiedPath != null) {
+        duplicated.add(copiedPath);
+      }
+    }
+    return duplicated;
+  }
+
+  List<IsarBreathCueEntryModel> _cloneBreathCues(
+    List<IsarBreathCueEntryModel> cues,
+  ) {
+    return cues
+        .map(
+          (cue) => IsarBreathCueEntryModel(
+            breathIndex: cue.breathIndex,
+            text: cue.text,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  String _duplicateTitle(String value) {
+    const duplicateSuffix = ' (복사본)';
+    if (value.endsWith(duplicateSuffix)) {
+      return value;
+    }
+    return '$value$duplicateSuffix';
+  }
+
+  Future<IsarSequenceStepModel> _requireStep(Isar isar, int stepId) async {
+    final step = await isar.isarSequenceStepModels.get(stepId);
+    if (step == null) {
+      throw StateError('동작을 찾을 수 없습니다.');
+    }
+    return step;
+  }
+
+  IsarSequenceStepModel _buildDuplicatedStepModel({
+    required IsarSequenceStepModel source,
+    required int sequenceId,
+    required int orderIndex,
+    required List<String> imagePaths,
+  }) {
+    final now = DateTime.now();
+    return IsarSequenceStepModel()
+      ..sequenceId = sequenceId
+      ..orderIndex = orderIndex
+      ..poseName = source.poseName
+      ..sanskritName = source.sanskritName
+      ..sideType = source.sideType
+      ..isBalancePose = source.isBalancePose
+      ..breathCount = source.breathCount
+      ..preparationCue = source.preparationCue
+      ..breathCues = _cloneBreathCues(source.breathCues)
+      ..releaseCue = source.releaseCue
+      ..cautionNote = source.cautionNote
+      ..beginnerModificationNote = source.beginnerModificationNote
+      ..imagePaths = imagePaths
+      ..createdAt = now
+      ..updatedAt = now;
+  }
+}
+
+class StepDuplicationResult {
+  const StepDuplicationResult({
+    required this.targetSequenceId,
+    required this.newStepId,
+  });
+
+  final int targetSequenceId;
+  final int newStepId;
 }

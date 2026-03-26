@@ -6,9 +6,17 @@ class StepImageStorage {
   const StepImageStorage();
 
   Future<String> copyToAppStorage(String sourcePath) async {
+    final copied = await copyToAppStorageIfExists(sourcePath);
+    if (copied == null) {
+      throw StateError('이미지 파일을 찾을 수 없습니다.');
+    }
+    return copied;
+  }
+
+  Future<String?> copyToAppStorageIfExists(String sourcePath) async {
     final sourceFile = File(sourcePath);
     if (!await sourceFile.exists()) {
-      throw StateError('이미지 파일을 찾을 수 없습니다.');
+      return null;
     }
 
     final directory = await _imageDirectory();
@@ -21,6 +29,10 @@ class StepImageStorage {
 
     final copied = await sourceFile.copy(targetPath);
     return copied.path;
+  }
+
+  Future<bool> exists(String path) async {
+    return File(path).exists();
   }
 
   Future<void> deleteFiles(Iterable<String> paths) async {

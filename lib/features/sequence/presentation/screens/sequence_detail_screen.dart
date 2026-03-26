@@ -2,11 +2,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/init/app_startup_controller.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
+import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
 import '../../domain/entities/sequence.dart';
 import '../../domain/entities/sequence_step.dart';
@@ -94,6 +96,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
           stepCount: steps.length,
           cueNoteCount: cueNoteCount,
           onBack: () => Navigator.of(context).maybePop(),
+          onOpenMenu: () => _showActionMenu(context, sequence),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -244,6 +247,9 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
               });
             }
           },
+          onShare: () async {
+            await Share.share(controller.text);
+          },
         );
       },
     );
@@ -305,6 +311,73 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
       if (mounted) {
         setState(() => _deleting = false);
       }
+    }
+  }
+
+  Future<void> _showActionMenu(BuildContext context, Sequence sequence) async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) {
+        return CupertinoActionSheet(
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
+                await _duplicateSequence(context, sequence);
+              },
+              child: const Text('시퀀스 복제'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('취소'),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _duplicateSequence(
+    BuildContext context,
+    Sequence sequence,
+  ) async {
+    final allowed = await ref
+        .read(proAccessGuardProvider)
+        .ensureFeatureAccess(context, ProFeature.sequenceDuplication);
+    if (!allowed || !context.mounted) {
+      return;
+    }
+
+    try {
+      final duplicatedSequenceId = await ref
+          .read(sequenceRepositoryProvider)
+          .duplicateSequence(sequence.id);
+      ref.invalidate(sequenceByIdProvider(widget.sequenceId));
+      ref.invalidate(sequenceStepsProvider(widget.sequenceId));
+      ref.invalidate(sequenceListProvider);
+      ref.invalidate(sequenceStepCountsProvider);
+      ref.invalidate(favoriteSequenceListProvider);
+      ref.invalidate(recentSequenceListProvider);
+      ref.invalidate(homeOverviewProvider);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushReplacementNamed(
+        AppRoutes.sequenceDetail,
+        arguments: SequenceDetailRouteArgs(sequenceId: duplicatedSequenceId),
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFE89D91),
+          content: Text('시퀀스를 복제하지 못했습니다. 다시 시도해주세요.'),
+        ),
+      );
     }
   }
 
@@ -462,12 +535,14 @@ class _HeaderCard extends StatelessWidget {
     required this.stepCount,
     required this.cueNoteCount,
     required this.onBack,
+    required this.onOpenMenu,
   });
 
   final Sequence sequence;
   final int stepCount;
   final int cueNoteCount;
   final VoidCallback onBack;
+  final VoidCallback onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -492,6 +567,11 @@ class _HeaderCard extends StatelessWidget {
             Row(
               children: [
                 _CircleIconButton(icon: CupertinoIcons.back, onTap: onBack),
+                const Spacer(),
+                _CircleIconButton(
+                  icon: CupertinoIcons.ellipsis_circle,
+                  onTap: onOpenMenu,
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -1303,10 +1383,12 @@ class _SharePreviewBottomSheet extends StatelessWidget {
   const _SharePreviewBottomSheet({
     required this.controller,
     required this.onCopy,
+    required this.onShare,
   });
 
   final TextEditingController controller;
   final VoidCallback onCopy;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1377,6 +1459,13 @@ class _SharePreviewBottomSheet extends StatelessWidget {
                     child: _DialogButton(
                       label: '복사',
                       onTap: onCopy,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DialogButton(
+                      label: '공유',
+                      onTap: onShare,
                       variant: _DialogButtonVariant.primary,
                     ),
                   ),

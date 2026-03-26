@@ -4,7 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/init/app_startup_controller.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../pro/application/pro_access.dart';
+import '../../pro/presentation/widgets/pro_upgrade_sheet.dart';
+import '../../home/application/home_providers.dart';
+import '../../sequence/application/sequence_providers.dart';
+import '../../sequence/data/services/sequence_backup_service.dart';
 import '../domain/entities/user_settings.dart';
+import '../domain/enums/app_plan_type.dart';
 import '../domain/enums/app_text_size.dart';
 import '../domain/enums/app_theme_type.dart';
 import '../domain/enums/share_format_type.dart';
@@ -15,6 +21,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(userSettingsControllerProvider);
+    final isProEnabled = ref.watch(isProEnabledProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -56,6 +63,20 @@ class SettingsScreen extends ConsumerWidget {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(0, 24, 0, 32),
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                        child: _PlanCard(
+                          settings: settings,
+                          isProEnabled: isProEnabled,
+                          onShowBenefits: () =>
+                              _showProBenefitsSheet(context, ref),
+                          onBetaProChanged: (enabled) async {
+                            await ref
+                                .read(userSettingsControllerProvider.notifier)
+                                .setBetaProOverrideEnabled(enabled);
+                          },
+                        ),
+                      ),
                       _SettingsSection(
                         title: '화면 및 디자인',
                         children: [
@@ -93,14 +114,16 @@ class SettingsScreen extends ConsumerWidget {
                           ),
                           _SettingsRow(
                             icon: Icons.cloud_download_outlined,
-                            label: '요가 시퀀스 내보내기',
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('내보내기 기능은 준비 중입니다.'),
-                                ),
-                              );
-                            },
+                            label: '요가 시퀀스 백업 내보내기',
+                            value: 'JSON',
+                            hasChevron: true,
+                            onTap: () => _handleBackupExport(context, ref),
+                          ),
+                          _SettingsRow(
+                            icon: Icons.restore_rounded,
+                            label: '요가 시퀀스 복원',
+                            hasChevron: true,
+                            onTap: () => _handleBackupRestore(context, ref),
                             showDivider: false,
                           ),
                         ],
@@ -255,6 +278,313 @@ class SettingsScreen extends ConsumerWidget {
       case ShareFormatType.short:
         return '짧은 요약';
     }
+  }
+
+  static String _planLabel(UserSettings settings) {
+    if (settings.planType == AppPlanType.pro) {
+      return 'Pro';
+    }
+    if (settings.betaProOverrideEnabled) {
+      return '베타 Pro';
+    }
+    return '무료';
+  }
+
+  Future<void> _showProBenefitsSheet(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    await showProUpgradeSheet(
+      context,
+      title: '베타용 Pro 기능을 사용할 수 있어요',
+      description: '현재 빌드에서는 실제 결제 없이 설정에서 베타 Pro를 켜고 모든 고급 기능을 확인할 수 있어요.',
+      onEnableBetaPro: () async {
+        await ref
+            .read(userSettingsControllerProvider.notifier)
+            .setBetaProOverrideEnabled(true);
+      },
+    );
+  }
+
+  Future<void> _handleBackupExport(BuildContext context, WidgetRef ref) async {
+    final canUse = await ref
+        .read(proAccessGuardProvider)
+        .ensureFeatureAccess(context, ProFeature.backupRestore);
+    if (!canUse || !context.mounted) {
+      return;
+    }
+
+    final shouldExport = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          title: const Text('JSON 백업을 내보낼까요?'),
+          content: const Text(
+            '이번 베타 백업에는 시퀀스와 동작 텍스트만 포함됩니다. 첨부 이미지는 백업 파일에 포함되지 않습니다.',
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('취소'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              isDefaultAction: true,
+              child: const Text('내보내기'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldExport != true || !context.mounted) {
+      return;
+    }
+
+    try {
+      final count = await ref.read(sequenceBackupServiceProvider).exportBackup();
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$count개의 시퀀스를 백업 파일로 내보냈습니다.')),
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFE89D91),
+          content: Text('백업 파일을 내보내지 못했습니다. 다시 시도해주세요.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleBackupRestore(BuildContext context, WidgetRef ref) async {
+    final canUse = await ref
+        .read(proAccessGuardProvider)
+        .ensureFeatureAccess(context, ProFeature.backupRestore);
+    if (!canUse || !context.mounted) {
+      return;
+    }
+
+    final shouldRestore = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          title: const Text('백업 파일로 복원할까요?'),
+          content: const Text(
+            '현재 저장된 시퀀스와 동작 데이터는 모두 교체됩니다. 테마, 글자 크기, 공유 형식 설정은 유지됩니다.',
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('취소'),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('복원'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldRestore != true || !context.mounted) {
+      return;
+    }
+
+    try {
+      final restoredCount = await ref
+          .read(sequenceBackupServiceProvider)
+          .restoreBackupFromPicker();
+      if (restoredCount == null || !context.mounted) {
+        return;
+      }
+
+      _invalidateSequenceCaches(ref);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$restoredCount개의 시퀀스를 복원했습니다.')),
+      );
+    } on FormatException catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFE89D91),
+          content: Text(error.message),
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFE89D91),
+          content: Text('백업 파일을 복원하지 못했습니다. 다시 시도해주세요.'),
+        ),
+      );
+    }
+  }
+
+  void _invalidateSequenceCaches(WidgetRef ref) {
+    ref.invalidate(sequenceListProvider);
+    ref.invalidate(sequenceStepCountsProvider);
+    ref.invalidate(favoriteSequenceListProvider);
+    ref.invalidate(recentSequenceListProvider);
+    ref.invalidate(homeOverviewProvider);
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.settings,
+    required this.isProEnabled,
+    required this.onShowBenefits,
+    required this.onBetaProChanged,
+  });
+
+  final UserSettings settings;
+  final bool isProEnabled;
+  final VoidCallback onShowBenefits;
+  final ValueChanged<bool> onBetaProChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final planLabel = SettingsScreen._planLabel(settings);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primary.withValues(alpha: 0.18),
+            theme.cardColor,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    CupertinoIcons.sparkles,
+                    size: 20,
+                    color: primary,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '현재 플랜',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        planLabel,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: onShowBenefits,
+                  child: const Text('혜택 보기'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              isProEnabled
+                  ? '베타 Pro가 활성화되어 있어서 시퀀스 무제한, 이미지 첨부, 복제, 백업/복원을 모두 사용할 수 있어요.'
+                  : '무료 플랜은 시퀀스 3개까지 저장할 수 있어요. 베타 테스트 중에는 설정에서 Pro를 바로 켤 수 있어요.',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 15,
+                height: 1.6,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: theme.cardColor.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '베타 Pro 사용',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '실제 결제 없이 베타 테스트용 Pro 기능을 켤 수 있어요.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 14,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  CupertinoSwitch(
+                    value: settings.betaProOverrideEnabled,
+                    onChanged: onBetaProChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

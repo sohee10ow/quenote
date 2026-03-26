@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../app/init/app_startup_controller.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
+import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
 import '../../application/step_editor_draft.dart';
 import '../../data/local/step_image_storage.dart';
@@ -89,6 +91,7 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isProEnabled = ref.watch(isProEnabledProvider);
 
     if (!_isReady) {
       return Scaffold(
@@ -294,7 +297,7 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
                           ),
                         ),
                         const SizedBox(height: AppSpacing.xl),
-                        _buildImageSection(),
+                        _buildImageSection(isProEnabled),
                         if (_isEditMode) ...[
                           const SizedBox(height: AppSpacing.lg),
                           Center(
@@ -439,8 +442,85 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
     );
   }
 
-  Widget _buildImageSection() {
+  Widget _buildImageSection(bool isProEnabled) {
     final theme = Theme.of(context);
+
+    if (!isProEnabled) {
+      final imageCount = _imageDrafts.length;
+
+      return _buildSectionCard(
+        title: '동작 사진',
+        subtitle: '참고용 동작 이미지 첨부',
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.all(AppRadius.input),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      CupertinoIcons.lock_fill,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      imageCount > 0
+                          ? '저장된 사진 $imageCount장이 있어요'
+                          : '동작 사진은 Pro 기능이에요',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                imageCount > 0
+                    ? '기존 사진은 유지되지만, 추가하거나 삭제하려면 베타 Pro를 켜야 해요.'
+                    : '사진 첨부와 편집은 Pro에서 사용할 수 있어요. 베타 테스트 중에는 바로 Pro를 켤 수 있어요.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontSize: 14,
+                  height: 1.55,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => ref
+                            .read(proAccessGuardProvider)
+                            .ensureFeatureAccess(
+                              context,
+                              ProFeature.stepImages,
+                            ),
+                  child: const Text('베타 Pro 켜기'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return _buildSectionCard(
       title: '동작 사진',
@@ -466,23 +546,16 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.all(AppRadius.input),
-                      child: Container(
-                        color: theme.scaffoldBackgroundColor,
-                        child: Image.file(
-                          File(image.path),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) {
-                            return Center(
-                              child: Icon(
-                                CupertinoIcons.photo,
-                                size: 28,
-                                color: theme.textTheme.bodyMedium?.color
-                                    ?.withValues(alpha: 0.35),
-                              ),
-                            );
-                          },
+                        child: Container(
+                          color: theme.scaffoldBackgroundColor,
+                          child: Image.file(
+                            File(image.path),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) {
+                              return _buildMissingImagePlaceholder(theme);
+                            },
+                          ),
                         ),
-                      ),
                     ),
                     Positioned(
                       top: -8,
@@ -1102,6 +1175,13 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
+    final allowed = await ref
+        .read(proAccessGuardProvider)
+        .ensureFeatureAccess(context, ProFeature.stepImages);
+    if (!allowed) {
+      return;
+    }
+
     try {
       final picked = await _imagePicker.pickImage(
         source: source,
@@ -1134,7 +1214,9 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
     try {
       for (final image in _imageDrafts) {
         if (image.isPersisted) {
-          allPaths.add(image.path);
+          if (await stepImageStorage.exists(image.path)) {
+            allPaths.add(image.path);
+          }
           continue;
         }
 
@@ -1150,6 +1232,30 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
     return _PreparedImagePaths(
       allPaths: allPaths,
       newlyCopiedPaths: newlyCopiedPaths,
+    );
+  }
+
+  Widget _buildMissingImagePlaceholder(ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.photo,
+              size: 28,
+              color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.35),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              '이미지 파일을 찾을 수 없어요',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

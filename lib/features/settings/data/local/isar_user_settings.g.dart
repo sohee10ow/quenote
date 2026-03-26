@@ -18,23 +18,33 @@ const IsarUserSettingsModelSchema = CollectionSchema(
   name: r'IsarUserSettingsModel',
   id: -7354710303954557224,
   properties: {
-    r'defaultShareFormat': PropertySchema(
+    r'betaProOverrideEnabled': PropertySchema(
       id: 0,
+      name: r'betaProOverrideEnabled',
+      type: IsarType.bool,
+    ),
+    r'defaultShareFormat': PropertySchema(
+      id: 1,
       name: r'defaultShareFormat',
       type: IsarType.string,
     ),
     r'onboardingCompleted': PropertySchema(
-      id: 1,
+      id: 2,
       name: r'onboardingCompleted',
       type: IsarType.bool,
     ),
+    r'planType': PropertySchema(
+      id: 3,
+      name: r'planType',
+      type: IsarType.string,
+    ),
     r'selectedTheme': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'selectedTheme',
       type: IsarType.string,
     ),
     r'textSize': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'textSize',
       type: IsarType.string,
     )
@@ -60,6 +70,7 @@ int _isarUserSettingsModelEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.defaultShareFormat.length * 3;
+  bytesCount += 3 + object.planType.length * 3;
   bytesCount += 3 + object.selectedTheme.length * 3;
   bytesCount += 3 + object.textSize.length * 3;
   return bytesCount;
@@ -71,10 +82,12 @@ void _isarUserSettingsModelSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.defaultShareFormat);
-  writer.writeBool(offsets[1], object.onboardingCompleted);
-  writer.writeString(offsets[2], object.selectedTheme);
-  writer.writeString(offsets[3], object.textSize);
+  writer.writeBool(offsets[0], object.betaProOverrideEnabled);
+  writer.writeString(offsets[1], object.defaultShareFormat);
+  writer.writeBool(offsets[2], object.onboardingCompleted);
+  writer.writeString(offsets[3], object.planType);
+  writer.writeString(offsets[4], object.selectedTheme);
+  writer.writeString(offsets[5], object.textSize);
 }
 
 IsarUserSettingsModel _isarUserSettingsModelDeserialize(
@@ -84,11 +97,13 @@ IsarUserSettingsModel _isarUserSettingsModelDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = IsarUserSettingsModel();
-  object.defaultShareFormat = reader.readString(offsets[0]);
+  object.betaProOverrideEnabled = reader.readBool(offsets[0]);
+  object.defaultShareFormat = reader.readString(offsets[1]);
   object.id = id;
-  object.onboardingCompleted = reader.readBool(offsets[1]);
-  object.selectedTheme = reader.readString(offsets[2]);
-  object.textSize = reader.readString(offsets[3]);
+  object.onboardingCompleted = reader.readBool(offsets[2]);
+  object.planType = reader.readString(offsets[3]);
+  object.selectedTheme = reader.readString(offsets[4]);
+  object.textSize = reader.readString(offsets[5]);
   return object;
 }
 
@@ -100,12 +115,16 @@ P _isarUserSettingsModelDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readString(offset)) as P;
-    case 1:
       return (reader.readBool(offset)) as P;
-    case 2:
+    case 1:
       return (reader.readString(offset)) as P;
+    case 2:
+      return (reader.readBool(offset)) as P;
     case 3:
+      return (reader.readString(offset)) as P;
+    case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -209,6 +228,16 @@ extension IsarUserSettingsModelQueryWhere on QueryBuilder<IsarUserSettingsModel,
 
 extension IsarUserSettingsModelQueryFilter on QueryBuilder<
     IsarUserSettingsModel, IsarUserSettingsModel, QFilterCondition> {
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> betaProOverrideEnabledEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'betaProOverrideEnabled',
+        value: value,
+      ));
+    });
+  }
+
   QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
       QAfterFilterCondition> defaultShareFormatEqualTo(
     String value, {
@@ -409,6 +438,144 @@ extension IsarUserSettingsModelQueryFilter on QueryBuilder<
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'onboardingCompleted',
         value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'planType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'planType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'planType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'planType',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'planType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'planType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+          QAfterFilterCondition>
+      planTypeContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'planType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+          QAfterFilterCondition>
+      planTypeMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'planType',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'planType',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel,
+      QAfterFilterCondition> planTypeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'planType',
+        value: '',
       ));
     });
   }
@@ -699,6 +866,20 @@ extension IsarUserSettingsModelQueryLinks on QueryBuilder<IsarUserSettingsModel,
 extension IsarUserSettingsModelQuerySortBy
     on QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QSortBy> {
   QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      sortByBetaProOverrideEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'betaProOverrideEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      sortByBetaProOverrideEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'betaProOverrideEnabled', Sort.desc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
       sortByDefaultShareFormat() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'defaultShareFormat', Sort.asc);
@@ -723,6 +904,20 @@ extension IsarUserSettingsModelQuerySortBy
       sortByOnboardingCompletedDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'onboardingCompleted', Sort.desc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      sortByPlanType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'planType', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      sortByPlanTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'planType', Sort.desc);
     });
   }
 
@@ -757,6 +952,20 @@ extension IsarUserSettingsModelQuerySortBy
 
 extension IsarUserSettingsModelQuerySortThenBy
     on QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QSortThenBy> {
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      thenByBetaProOverrideEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'betaProOverrideEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      thenByBetaProOverrideEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'betaProOverrideEnabled', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
       thenByDefaultShareFormat() {
     return QueryBuilder.apply(this, (query) {
@@ -800,6 +1009,20 @@ extension IsarUserSettingsModelQuerySortThenBy
   }
 
   QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      thenByPlanType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'planType', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
+      thenByPlanTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'planType', Sort.desc);
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QAfterSortBy>
       thenBySelectedTheme() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'selectedTheme', Sort.asc);
@@ -831,6 +1054,13 @@ extension IsarUserSettingsModelQuerySortThenBy
 extension IsarUserSettingsModelQueryWhereDistinct
     on QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QDistinct> {
   QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QDistinct>
+      distinctByBetaProOverrideEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'betaProOverrideEnabled');
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QDistinct>
       distinctByDefaultShareFormat({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'defaultShareFormat',
@@ -842,6 +1072,13 @@ extension IsarUserSettingsModelQueryWhereDistinct
       distinctByOnboardingCompleted() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'onboardingCompleted');
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, IsarUserSettingsModel, QDistinct>
+      distinctByPlanType({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'planType', caseSensitive: caseSensitive);
     });
   }
 
@@ -869,6 +1106,13 @@ extension IsarUserSettingsModelQueryProperty on QueryBuilder<
     });
   }
 
+  QueryBuilder<IsarUserSettingsModel, bool, QQueryOperations>
+      betaProOverrideEnabledProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'betaProOverrideEnabled');
+    });
+  }
+
   QueryBuilder<IsarUserSettingsModel, String, QQueryOperations>
       defaultShareFormatProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -880,6 +1124,13 @@ extension IsarUserSettingsModelQueryProperty on QueryBuilder<
       onboardingCompletedProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'onboardingCompleted');
+    });
+  }
+
+  QueryBuilder<IsarUserSettingsModel, String, QQueryOperations>
+      planTypeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'planType');
     });
   }
 

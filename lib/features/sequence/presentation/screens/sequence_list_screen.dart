@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
+import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
 import '../../domain/entities/sequence.dart';
 import '../args/sequence_route_args.dart';
@@ -168,7 +169,13 @@ class _SequenceListScreenState extends ConsumerState<SequenceListScreen> {
     );
   }
 
-  void _openCreateScreen(BuildContext context) {
+  Future<void> _openCreateScreen(BuildContext context) async {
+    final allowed = await ref
+        .read(proAccessGuardProvider)
+        .ensureCanCreateSequence(context);
+    if (!allowed || !context.mounted) {
+      return;
+    }
     Navigator.of(context).pushNamed(AppRoutes.sequenceEditor);
   }
 
