@@ -132,7 +132,7 @@ class _HomeContent extends StatelessWidget {
           cueNotes: overview.recentCueNotes,
           onOpenStepEditor: onOpenStepEditor,
         ),
-      if (!overview.hasSequences) const _HomeEmptyState(),
+      if (!overview.hasSequences) _HomeEmptyState(onTap: onOpenSequenceEditor),
     ];
 
     return ListView(
@@ -715,7 +715,9 @@ class _RecentCueNoteCard extends StatelessWidget {
 }
 
 class _HomeEmptyState extends StatelessWidget {
-  const _HomeEmptyState();
+  const _HomeEmptyState({required this.onTap});
+
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -724,30 +726,51 @@ class _HomeEmptyState extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Column(
-        children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: primary.withValues(alpha: 0.1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('homeEmptyStateCta'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(32),
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return primary.withValues(alpha: 0.04);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return primary.withValues(alpha: 0.02);
+            }
+            return Colors.transparent;
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: primary.withValues(alpha: 0.1),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.add_rounded, size: 44, color: primary),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                Text(
+                  '시작해볼까요?',
+                  style: theme.textTheme.titleLarge?.copyWith(fontSize: 22),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '첫 번째 시퀀스를 만들고\n큐잉 노트를 작성해보세요',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
             ),
-            alignment: Alignment.center,
-            child: Icon(Icons.add_rounded, size: 44, color: primary),
           ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            '시작해볼까요?',
-            style: theme.textTheme.titleLarge?.copyWith(fontSize: 22),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '첫 번째 시퀀스를 만들고\n큐잉 노트를 작성해보세요',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
-          ),
-        ],
+        ),
       ),
     );
   }
