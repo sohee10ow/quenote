@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/isar_provider.dart';
@@ -16,19 +17,25 @@ final userSettingsControllerProvider =
 class UserSettingsController extends AsyncNotifier<UserSettings> {
   @override
   Future<UserSettings> build() async {
-    final isar = await ref.watch(isarProvider.future);
-    final stored = await isar.isarUserSettingsModels.get(0);
+    try {
+      final isar = await ref.watch(isarProvider.future);
+      final stored = await isar.isarUserSettingsModels.get(0);
 
-    if (stored != null) {
-      return stored.toDomain();
+      if (stored != null) {
+        return stored.toDomain();
+      }
+
+      const initial = UserSettings.initial();
+      await isar.writeTxn(() async {
+        await isar.isarUserSettingsModels.put(initial.toIsar());
+      });
+
+      return initial;
+    } catch (error, stackTrace) {
+      debugPrint('사용자 설정 초기화 실패: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
     }
-
-    const initial = UserSettings.initial();
-    await isar.writeTxn(() async {
-      await isar.isarUserSettingsModels.put(initial.toIsar());
-    });
-
-    return initial;
   }
 
   Future<void> setTheme(AppThemeType theme) async {

@@ -12,6 +12,7 @@ import 'package:quenote/features/sequence/domain/entities/sequence.dart';
 import 'package:quenote/features/sequence/domain/entities/sequence_step.dart';
 import 'package:quenote/features/sequence/domain/enums/sequence_level.dart';
 import 'package:quenote/features/sequence/domain/enums/side_type.dart';
+import 'package:quenote/features/sequence/domain/enums/step_template_category.dart';
 import 'package:quenote/features/sequence/presentation/args/sequence_route_args.dart';
 import 'package:quenote/features/sequence/presentation/screens/step_detail_screen.dart';
 import 'package:quenote/features/settings/domain/enums/app_theme_type.dart';
@@ -98,6 +99,33 @@ void main() {
     expect(find.text('다른 시퀀스에 넣기'), findsOneWidget);
   });
 
+  testWidgets('즐겨찾기에 저장을 선택하면 템플릿 저장을 호출한다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: [_sampleStructuredStep()],
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const StepDetailScreen(sequenceId: 1, stepId: 10),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(CupertinoIcons.ellipsis_circle));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('즐겨찾기에 저장'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('시작 스트레칭'));
+    await tester.pumpAndSettle();
+
+    expect(repository.saveTemplateCallCount, 1);
+    expect(repository.lastSavedTemplateStepId, 10);
+    expect(repository.lastSavedTemplateCategory, StepTemplateCategory.warmup);
+    expect(find.text('즐겨찾기에 저장했어요.'), findsOneWidget);
+  });
+
   testWidgets('새로운 시퀀스에 넣기를 선택하면 시퀀스 생성 화면으로 이동한다', (tester) async {
     final repository = _FakeSequenceRepository(
       sequence: _sampleSequence(),
@@ -132,6 +160,61 @@ void main() {
 
     expect(receivedArgs?.pendingDuplicateSourceStepId, 10);
     expect(find.text('시퀀스 생성 화면'), findsOneWidget);
+  });
+
+  testWidgets('현재 시퀀스에 넣기를 선택하면 기존 시퀀스 상세로 돌아간다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: [_sampleStructuredStep()],
+      duplicatedStepResult: const StepDuplicationResult(
+        targetSequenceId: 1,
+        newStepId: 77,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sequenceRepositoryProvider.overrideWithValue(repository),
+          isProEnabledProvider.overrideWithValue(true),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.fromType(AppThemeType.sage),
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              const StepDetailScreen(sequenceId: 1, stepId: 10),
+                        ),
+                      );
+                    },
+                    child: const Text('원본 시퀀스 상세'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('원본 시퀀스 상세'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(CupertinoIcons.ellipsis_circle));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('동작 복제'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('현재 시퀀스에 넣기'));
+    await tester.pumpAndSettle();
+
+    expect(repository.lastDuplicatedStepId, 10);
+    expect(find.text('원본 시퀀스 상세'), findsOneWidget);
+    expect(find.byType(StepDetailScreen), findsNothing);
   });
 
   testWidgets('표시할 큐잉이 없으면 empty state를 보여준다', (tester) async {
@@ -233,12 +316,18 @@ class _FakeSequenceRepository extends SequenceRepository {
   _FakeSequenceRepository({
     required Sequence? sequence,
     required List<SequenceStep> steps,
+    this.duplicatedStepResult,
   }) : _sequence = sequence,
        _steps = List<SequenceStep>.from(steps),
        super(_unsupportedRead);
 
   final Sequence? _sequence;
   final List<SequenceStep> _steps;
+  final StepDuplicationResult? duplicatedStepResult;
+  int? lastDuplicatedStepId;
+  int saveTemplateCallCount = 0;
+  int? lastSavedTemplateStepId;
+  StepTemplateCategory? lastSavedTemplateCategory;
 
   static T _unsupportedRead<T>(ProviderListenable<T> provider) {
     throw UnimplementedError();
@@ -254,5 +343,25 @@ class _FakeSequenceRepository extends SequenceRepository {
     return _steps
         .where((step) => step.sequenceId == sequenceId)
         .toList(growable: false);
+  }
+
+  @override
+  Future<StepDuplicationResult> duplicateStepIntoSameSequence(
+    int stepId,
+  ) async {
+    lastDuplicatedStepId = stepId;
+    return duplicatedStepResult ??
+        const StepDuplicationResult(targetSequenceId: 1, newStepId: 999);
+  }
+
+  @override
+  Future<int> saveStepAsTemplate({
+    required int stepId,
+    required StepTemplateCategory category,
+  }) async {
+    saveTemplateCallCount += 1;
+    lastSavedTemplateStepId = stepId;
+    lastSavedTemplateCategory = category;
+    return 101;
   }
 }

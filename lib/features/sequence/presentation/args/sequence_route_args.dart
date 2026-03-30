@@ -11,10 +11,15 @@ class SequenceDetailRouteArgs {
 }
 
 class StepEditorRouteArgs {
-  const StepEditorRouteArgs({required this.sequenceId, this.stepId});
+  const StepEditorRouteArgs({
+    required this.sequenceId,
+    this.stepId,
+    this.templateId,
+  });
 
   final int sequenceId;
   final int? stepId;
+  final int? templateId;
 }
 
 class StepDetailRouteArgs {
@@ -38,4 +43,10 @@ class StepDuplicateTargetRouteArgs {
 
   final int sourceSequenceId;
   final int sourceStepId;
+}
+
+class SequenceFullViewRouteArgs {
+  const SequenceFullViewRouteArgs({required this.sequenceId});
+
+  final int sequenceId;
 }

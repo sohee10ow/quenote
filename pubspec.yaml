@@ -47,6 +47,9 @@ dev_dependencies:
   isar_generator: ^3.1.0+1
   flutter_launcher_icons: ^0.14.4
 
+dependency_overrides:
+  path_provider_foundation: 2.4.0
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

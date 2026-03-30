@@ -14,13 +14,21 @@ import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
 import '../../application/step_editor_draft.dart';
 import '../../data/local/step_image_storage.dart';
+import '../../domain/entities/sequence_step.dart';
+import '../../domain/entities/step_template.dart';
 import '../../domain/enums/side_type.dart';
 
 class StepEditorScreen extends ConsumerStatefulWidget {
-  const StepEditorScreen({super.key, required this.sequenceId, this.stepId});
+  const StepEditorScreen({
+    super.key,
+    required this.sequenceId,
+    this.stepId,
+    this.templateId,
+  });
 
   final int sequenceId;
   final int? stepId;
+  final int? templateId;
 
   @override
   ConsumerState<StepEditorScreen> createState() => _StepEditorScreenState();
@@ -546,16 +554,16 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.all(AppRadius.input),
-                        child: Container(
-                          color: theme.scaffoldBackgroundColor,
-                          child: Image.file(
-                            File(image.path),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) {
-                              return _buildMissingImagePlaceholder(theme);
-                            },
-                          ),
+                      child: Container(
+                        color: theme.scaffoldBackgroundColor,
+                        child: Image.file(
+                          File(image.path),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) {
+                            return _buildMissingImagePlaceholder(theme);
+                          },
                         ),
+                      ),
                     ),
                     Positioned(
                       top: -8,
@@ -1039,32 +1047,68 @@ class _StepEditorScreenState extends ConsumerState<StepEditorScreen> {
         setState(() {});
         return;
       }
-
-      _poseNameController.text = step.poseName;
-      _sanskritNameController.text = step.sanskritName ?? '';
-      _preparationCueController.text = step.preparationCue;
-      _releaseCueController.text = step.releaseCue;
-      _cautionController.text = step.cautionNote ?? '';
-      _beginnerController.text = step.beginnerModificationNote ?? '';
-      _sideType = step.sideType;
-      _isBalancePose = step.isBalancePose;
-      _breathCount = step.breathCount;
-      _imageDrafts
-        ..clear()
-        ..addAll(
-          step.imagePaths.map(
-            (path) => _StepImageDraft(path: path, isPersisted: true),
-          ),
-        );
-      _syncBreathCueControllers(
-        _breathCount,
-        step.breathCues.map((cue) => cue.text).toList(growable: false),
-      );
+      _applyStepValues(step);
+    } else if (widget.templateId != null) {
+      final template = await ref
+          .read(sequenceRepositoryProvider)
+          .findStepTemplateById(widget.templateId!);
+      if (!mounted) {
+        return;
+      }
+      if (template != null) {
+        _applyTemplateValues(template);
+      }
     }
 
     _initialDraft = _currentDraft();
     _isReady = true;
     setState(() {});
+  }
+
+  void _applyStepValues(SequenceStep step) {
+    _poseNameController.text = step.poseName;
+    _sanskritNameController.text = step.sanskritName ?? '';
+    _preparationCueController.text = step.preparationCue;
+    _releaseCueController.text = step.releaseCue;
+    _cautionController.text = step.cautionNote ?? '';
+    _beginnerController.text = step.beginnerModificationNote ?? '';
+    _sideType = step.sideType;
+    _isBalancePose = step.isBalancePose;
+    _breathCount = step.breathCount;
+    _imageDrafts
+      ..clear()
+      ..addAll(
+        step.imagePaths.map(
+          (path) => _StepImageDraft(path: path, isPersisted: true),
+        ),
+      );
+    _syncBreathCueControllers(
+      _breathCount,
+      step.breathCues.map((cue) => cue.text).toList(growable: false),
+    );
+  }
+
+  void _applyTemplateValues(StepTemplate template) {
+    _poseNameController.text = template.poseName;
+    _sanskritNameController.text = template.sanskritName ?? '';
+    _preparationCueController.text = template.preparationCue;
+    _releaseCueController.text = template.releaseCue;
+    _cautionController.text = template.cautionNote ?? '';
+    _beginnerController.text = template.beginnerModificationNote ?? '';
+    _sideType = template.sideType;
+    _isBalancePose = template.isBalancePose;
+    _breathCount = template.breathCount;
+    _imageDrafts
+      ..clear()
+      ..addAll(
+        template.imagePaths.map(
+          (path) => _StepImageDraft(path: path, isPersisted: true),
+        ),
+      );
+    _syncBreathCueControllers(
+      _breathCount,
+      template.breathCues.map((cue) => cue.text).toList(growable: false),
+    );
   }
 
   Future<void> _onBreathCountChanged(int nextValue) async {

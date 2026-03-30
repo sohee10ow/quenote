@@ -12,6 +12,7 @@ import 'package:quenote/features/sequence/domain/entities/sequence.dart';
 import 'package:quenote/features/sequence/domain/entities/sequence_step.dart';
 import 'package:quenote/features/sequence/domain/enums/sequence_level.dart';
 import 'package:quenote/features/sequence/domain/enums/side_type.dart';
+import 'package:quenote/features/sequence/presentation/args/sequence_route_args.dart';
 import 'package:quenote/features/sequence/presentation/screens/sequence_detail_screen.dart';
 import 'package:quenote/features/settings/domain/enums/share_format_type.dart';
 import 'package:quenote/features/settings/domain/enums/app_theme_type.dart';
@@ -48,7 +49,7 @@ void main() {
     expect(find.text('아침 활력 요가'), findsOneWidget);
     expect(find.text('편집'), findsNothing);
     expect(find.text('텍스트 복사'), findsOneWidget);
-    expect(find.text('공유'), findsOneWidget);
+    expect(find.text('전체 보기'), findsOneWidget);
     expect(find.text('수업 노트'), findsOneWidget);
     expect(find.text('동작 순서'), findsOneWidget);
     expect(find.text('순서 변경'), findsOneWidget);
@@ -64,6 +65,122 @@ void main() {
 
     expect(find.text('동작 추가'), findsOneWidget);
     expect(find.text('시퀀스 삭제'), findsOneWidget);
+  });
+
+  testWidgets('전체 보기 버튼을 누르면 전용 화면으로 이동한다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: _sampleSteps(),
+    );
+    SequenceFullViewRouteArgs? receivedArgs;
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const SequenceDetailScreen(sequenceId: 1),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.sequenceFullView) {
+            receivedArgs = settings.arguments as SequenceFullViewRouteArgs;
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const Scaffold(body: Text('전체 보기 화면')),
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('전체 보기'));
+    await tester.pumpAndSettle();
+
+    expect(receivedArgs?.sequenceId, 1);
+    expect(find.text('전체 보기 화면'), findsOneWidget);
+  });
+
+  testWidgets('동작 추가 버튼을 누르면 추가 방식 선택 시트가 열린다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: _sampleSteps(),
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const SequenceDetailScreen(sequenceId: 1),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('동작 추가'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('동작 추가'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('직접 작성'), findsOneWidget);
+    expect(find.text('즐겨찾기에서 가져오기'), findsOneWidget);
+  });
+
+  testWidgets('즐겨찾기에서 가져오기를 선택하면 새 동작을 만든 뒤 편집 화면으로 이동한다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      sequence: _sampleSequence(),
+      steps: _sampleSteps(),
+      createdStepIdFromTemplate: 44,
+    );
+    StepEditorRouteArgs? receivedArgs;
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const SequenceDetailScreen(sequenceId: 1),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.stepTemplatePicker) {
+            return MaterialPageRoute<int?>(
+              settings: settings,
+              builder: (context) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  Navigator.of(context).pop(301);
+                });
+                return const Scaffold(body: Text('템플릿 선택'));
+              },
+            );
+          }
+          if (settings.name == AppRoutes.stepEditor) {
+            receivedArgs = settings.arguments as StepEditorRouteArgs;
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const Scaffold(body: Text('동작 편집 화면')),
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('동작 추가'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('동작 추가'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('즐겨찾기에서 가져오기'));
+    await tester.pumpAndSettle();
+
+    expect(repository.lastTemplateSequenceId, 1);
+    expect(repository.lastTemplateId, 301);
+    expect(receivedArgs?.sequenceId, 1);
+    expect(receivedArgs?.stepId, 44);
+    expect(find.text('동작 편집 화면'), findsOneWidget);
   });
 
   testWidgets('시퀀스를 삭제하면 목록 화면으로 이동한다', (tester) async {
@@ -221,13 +338,17 @@ class _FakeSequenceRepository extends SequenceRepository {
   _FakeSequenceRepository({
     required Sequence? sequence,
     required List<SequenceStep> steps,
+    this.createdStepIdFromTemplate = 41,
   }) : _sequence = sequence,
        _steps = List<SequenceStep>.from(steps),
        super(_unsupportedRead);
 
   Sequence? _sequence;
   final List<SequenceStep> _steps;
+  final int createdStepIdFromTemplate;
   int deleteCallCount = 0;
+  int? lastTemplateSequenceId;
+  int? lastTemplateId;
 
   static T _unsupportedRead<T>(ProviderListenable<T> provider) {
     throw UnimplementedError();
@@ -251,5 +372,15 @@ class _FakeSequenceRepository extends SequenceRepository {
     if (_sequence?.id == sequenceId) {
       _sequence = null;
     }
+  }
+
+  @override
+  Future<int> createStepFromTemplate({
+    required int sequenceId,
+    required int templateId,
+  }) async {
+    lastTemplateSequenceId = sequenceId;
+    lastTemplateId = templateId;
+    return createdStepIdFromTemplate;
   }
 }

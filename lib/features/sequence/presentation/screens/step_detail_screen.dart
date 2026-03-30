@@ -9,9 +9,11 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
 import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
+import '../../application/step_template_providers.dart';
 import '../../domain/entities/sequence.dart';
 import '../../domain/entities/sequence_step.dart';
 import '../../domain/enums/side_type.dart';
+import '../../domain/enums/step_template_category.dart';
 import '../args/sequence_route_args.dart';
 
 class StepDetailScreen extends ConsumerWidget {
@@ -103,6 +105,13 @@ class StepDetailScreen extends ConsumerWidget {
             CupertinoActionSheetAction(
               onPressed: () async {
                 Navigator.of(sheetContext).pop();
+                await _showTemplateCategorySheet(context, ref, step);
+              },
+              child: const Text('즐겨찾기에 저장'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
                 await _showDuplicateOptions(context, ref, sequence, step);
               },
               child: const Text('동작 복제'),
@@ -115,6 +124,77 @@ class StepDetailScreen extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _showTemplateCategorySheet(
+    BuildContext context,
+    WidgetRef ref,
+    SequenceStep step,
+  ) async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) {
+        return CupertinoActionSheet(
+          title: const Text('즐겨찾기에 저장'),
+          message: const Text('동작 템플릿 카테고리를 선택하세요.'),
+          actions: StepTemplateCategory.values
+              .map((category) {
+                return CupertinoActionSheetAction(
+                  onPressed: () async {
+                    Navigator.of(sheetContext).pop();
+                    await _saveStepAsTemplate(context, ref, step, category);
+                  },
+                  child: Text(category.label),
+                );
+              })
+              .toList(growable: false),
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('취소'),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _saveStepAsTemplate(
+    BuildContext context,
+    WidgetRef ref,
+    SequenceStep step,
+    StepTemplateCategory category,
+  ) async {
+    try {
+      final repository = ref.read(sequenceRepositoryProvider);
+      final templateId = await repository.saveStepAsTemplate(
+        stepId: step.id,
+        category: category,
+      );
+
+      ref.invalidate(stepTemplateListProvider(null));
+      for (final item in StepTemplateCategory.values) {
+        ref.invalidate(stepTemplateListProvider(item));
+      }
+      ref.invalidate(stepTemplateByIdProvider(templateId));
+
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('즐겨찾기에 저장했어요.')));
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFE89D91),
+          content: Text('템플릿 저장에 실패했습니다. 다시 시도해주세요.'),
+        ),
+      );
+    }
   }
 
   Future<void> _duplicateStep(
@@ -133,11 +213,15 @@ class StepDetailScreen extends ConsumerWidget {
         return;
       }
 
-      Navigator.of(context).pushReplacementNamed(
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+        return;
+      }
+
+      navigator.pushReplacementNamed(
         AppRoutes.sequenceDetail,
-        arguments: SequenceDetailRouteArgs(
-          sequenceId: result.targetSequenceId,
-        ),
+        arguments: SequenceDetailRouteArgs(sequenceId: result.targetSequenceId),
       );
     } catch (_) {
       if (!context.mounted) {
@@ -175,12 +259,7 @@ class StepDetailScreen extends ConsumerWidget {
             CupertinoActionSheetAction(
               onPressed: () async {
                 Navigator.of(sheetContext).pop();
-                await _duplicateStep(
-                  context,
-                  ref,
-                  sequence,
-                  step.id,
-                );
+                await _duplicateStep(context, ref, sequence, step.id);
               },
               child: const Text('현재 시퀀스에 넣기'),
             ),
@@ -303,11 +382,7 @@ class _StepDetailContent extends StatelessWidget {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.only(bottom: 32),
       children: [
-        _StepHeaderCard(
-          sequence: sequence,
-          step: step,
-          onOpenMenu: onOpenMenu,
-        ),
+        _StepHeaderCard(sequence: sequence, step: step, onOpenMenu: onOpenMenu),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           child: Column(

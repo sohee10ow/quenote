@@ -8,7 +8,9 @@ import 'package:quenote/features/sequence/application/sequence_providers.dart';
 import 'package:quenote/features/sequence/data/repositories/sequence_repository.dart';
 import 'package:quenote/features/sequence/domain/entities/breath_cue_entry.dart';
 import 'package:quenote/features/sequence/domain/entities/sequence_step.dart';
+import 'package:quenote/features/sequence/domain/entities/step_template.dart';
 import 'package:quenote/features/sequence/domain/enums/side_type.dart';
+import 'package:quenote/features/sequence/domain/enums/step_template_category.dart';
 import 'package:quenote/features/sequence/presentation/screens/step_editor_screen.dart';
 import 'package:quenote/features/settings/domain/enums/app_theme_type.dart';
 
@@ -108,6 +110,25 @@ void main() {
     expect(find.text('동작 삭제'), findsOneWidget);
     expect(find.text('전사 1'), findsOneWidget);
   });
+
+  testWidgets('템플릿으로 시작하면 새 동작 추가 상태로 템플릿 값이 채워진다', (tester) async {
+    final repository = _FakeSequenceRepository(
+      existingTemplate: _sampleTemplate(),
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        repository: repository,
+        child: const StepEditorScreen(sequenceId: 1, templateId: 3),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('새 동작 추가'), findsOneWidget);
+    expect(find.text('동작 삭제'), findsNothing);
+    expect(find.text('비둘기 자세 준비'), findsOneWidget);
+    expect(find.text('왼쪽'), findsOneWidget);
+  });
 }
 
 Widget _buildTestApp({
@@ -185,10 +206,35 @@ SequenceStep _sampleStep() {
   );
 }
 
+StepTemplate _sampleTemplate() {
+  return StepTemplate(
+    id: 3,
+    category: StepTemplateCategory.repeating,
+    poseName: '비둘기 자세 준비',
+    sanskritName: null,
+    sideType: SideType.left,
+    isBalancePose: false,
+    breathCount: 2,
+    preparationCue: '왼쪽 무릎을 앞으로 가져옵니다.',
+    breathCues: const [
+      BreathCueEntry(breathIndex: 1, text: '골반을 정면으로 맞춥니다.'),
+      BreathCueEntry(breathIndex: 2, text: '숨을 길게 내쉽니다.'),
+    ],
+    releaseCue: '손으로 바닥을 밀어 돌아옵니다.',
+    cautionNote: null,
+    beginnerModificationNote: null,
+    imagePaths: const [],
+    createdAt: DateTime(2026, 3, 18),
+    updatedAt: DateTime(2026, 3, 19),
+  );
+}
+
 class _FakeSequenceRepository extends SequenceRepository {
-  _FakeSequenceRepository({this.existingStep}) : super(_unsupportedRead);
+  _FakeSequenceRepository({this.existingStep, this.existingTemplate})
+    : super(_unsupportedRead);
 
   final SequenceStep? existingStep;
+  final StepTemplate? existingTemplate;
 
   int upsertCallCount = 0;
   int? lastSequenceId;
@@ -203,6 +249,11 @@ class _FakeSequenceRepository extends SequenceRepository {
   @override
   Future<SequenceStep?> findStepById(int stepId) async {
     return existingStep?.id == stepId ? existingStep : null;
+  }
+
+  @override
+  Future<StepTemplate?> findStepTemplateById(int templateId) async {
+    return existingTemplate?.id == templateId ? existingTemplate : null;
   }
 
   @override

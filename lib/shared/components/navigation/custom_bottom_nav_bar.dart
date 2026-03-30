@@ -55,8 +55,8 @@ class CustomBottomNavBar extends StatelessWidget {
                 label: '홈',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.list_alt_outlined),
-                activeIcon: Icon(Icons.list_alt_rounded),
+                icon: Icon(Icons.view_list_outlined),
+                activeIcon: Icon(Icons.view_list_rounded),
                 label: '시퀀스',
               ),
               BottomNavigationBarItem(

@@ -4,11 +4,14 @@ import 'package:isar/isar.dart';
 import '../../../../core/database/isar_provider.dart';
 import '../../domain/entities/sequence.dart';
 import '../../domain/entities/sequence_step.dart';
+import '../../domain/entities/step_template.dart';
 import '../../domain/enums/sequence_level.dart';
 import '../../domain/enums/side_type.dart';
+import '../../domain/enums/step_template_category.dart';
 import '../local/isar_breath_cue_entry.dart';
 import '../local/isar_sequence.dart';
 import '../local/isar_sequence_step.dart';
+import '../local/isar_step_template.dart';
 import '../local/step_image_storage.dart';
 import '../models/sequence_backup_snapshot.dart';
 
@@ -96,6 +99,27 @@ class SequenceRepository {
   Future<int> countSequences() async {
     final isar = await _db();
     return isar.isarSequenceModels.count();
+  }
+
+  Future<List<StepTemplate>> fetchStepTemplates({
+    StepTemplateCategory? category,
+  }) async {
+    final isar = await _db();
+    final items = category == null
+        ? await isar.isarStepTemplateModels.where().findAll()
+        : await isar.isarStepTemplateModels
+              .filter()
+              .categoryEqualTo(category.name)
+              .findAll();
+    final mapped = items.map((item) => item.toDomain()).toList(growable: false);
+    mapped.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return mapped;
+  }
+
+  Future<StepTemplate?> findStepTemplateById(int templateId) async {
+    final isar = await _db();
+    final model = await isar.isarStepTemplateModels.get(templateId);
+    return model?.toDomain();
   }
 
   Future<int> createSequence({
@@ -217,6 +241,79 @@ class SequenceRepository {
     await stepImageStorage.deleteFiles(removedImagePaths);
   }
 
+  Future<int> saveStepAsTemplate({
+    required int stepId,
+    required StepTemplateCategory category,
+  }) async {
+    final isar = await _db();
+    final step = await _requireStep(isar, stepId);
+    final copiedImagePaths = await _duplicateImagePaths(step.imagePaths);
+
+    try {
+      return await isar.writeTxn(() async {
+        final model = _buildTemplateFromStep(
+          source: step,
+          category: category,
+          imagePaths: copiedImagePaths,
+        );
+        return isar.isarStepTemplateModels.put(model);
+      });
+    } catch (_) {
+      await stepImageStorage.deleteFiles(copiedImagePaths);
+      rethrow;
+    }
+  }
+
+  Future<void> deleteStepTemplate(int templateId) async {
+    final isar = await _db();
+    final model = await isar.isarStepTemplateModels.get(templateId);
+    if (model == null) {
+      return;
+    }
+
+    final imagePaths = List<String>.from(model.imagePaths);
+    await isar.writeTxn(() => isar.isarStepTemplateModels.delete(templateId));
+    await stepImageStorage.deleteFiles(imagePaths);
+  }
+
+  Future<int> createStepFromTemplate({
+    required int sequenceId,
+    required int templateId,
+  }) async {
+    final isar = await _db();
+    final template = await _requireTemplate(isar, templateId);
+    final copiedImagePaths = await _duplicateImagePaths(template.imagePaths);
+
+    try {
+      return await isar.writeTxn(() async {
+        final nextOrder = await _nextOrderIndex(isar, sequenceId);
+        final model = IsarSequenceStepModel()
+          ..sequenceId = sequenceId
+          ..orderIndex = nextOrder
+          ..poseName = template.poseName
+          ..sanskritName = template.sanskritName
+          ..sideType = template.sideType
+          ..isBalancePose = template.isBalancePose
+          ..breathCount = template.breathCount
+          ..preparationCue = template.preparationCue
+          ..breathCues = _cloneBreathCues(template.breathCues)
+          ..releaseCue = template.releaseCue
+          ..cautionNote = template.cautionNote
+          ..beginnerModificationNote = template.beginnerModificationNote
+          ..imagePaths = copiedImagePaths
+          ..createdAt = DateTime.now()
+          ..updatedAt = DateTime.now();
+
+        final newStepId = await isar.isarSequenceStepModels.put(model);
+        await _touchSequence(isar, sequenceId);
+        return newStepId;
+      });
+    } catch (_) {
+      await stepImageStorage.deleteFiles(copiedImagePaths);
+      rethrow;
+    }
+  }
+
   Future<void> deleteStep(int stepId) async {
     final isar = await _db();
     final model = await isar.isarSequenceStepModels.get(stepId);
@@ -253,7 +350,9 @@ class SequenceRepository {
     });
   }
 
-  Future<StepDuplicationResult> duplicateStepIntoSameSequence(int stepId) async {
+  Future<StepDuplicationResult> duplicateStepIntoSameSequence(
+    int stepId,
+  ) async {
     final isar = await _db();
     final step = await _requireStep(isar, stepId);
     final copiedImagePaths = await _duplicateImagePaths(step.imagePaths);
@@ -615,6 +714,29 @@ class SequenceRepository {
         .toList(growable: false);
   }
 
+  IsarStepTemplateModel _buildTemplateFromStep({
+    required IsarSequenceStepModel source,
+    required StepTemplateCategory category,
+    required List<String> imagePaths,
+  }) {
+    final now = DateTime.now();
+    return IsarStepTemplateModel()
+      ..category = category.name
+      ..poseName = source.poseName
+      ..sanskritName = source.sanskritName
+      ..sideType = source.sideType
+      ..isBalancePose = source.isBalancePose
+      ..breathCount = source.breathCount
+      ..preparationCue = source.preparationCue
+      ..breathCues = _cloneBreathCues(source.breathCues)
+      ..releaseCue = source.releaseCue
+      ..cautionNote = source.cautionNote
+      ..beginnerModificationNote = source.beginnerModificationNote
+      ..imagePaths = imagePaths
+      ..createdAt = now
+      ..updatedAt = now;
+  }
+
   String _duplicateTitle(String value) {
     const duplicateSuffix = ' (복사본)';
     if (value.endsWith(duplicateSuffix)) {
@@ -629,6 +751,17 @@ class SequenceRepository {
       throw StateError('동작을 찾을 수 없습니다.');
     }
     return step;
+  }
+
+  Future<IsarStepTemplateModel> _requireTemplate(
+    Isar isar,
+    int templateId,
+  ) async {
+    final template = await isar.isarStepTemplateModels.get(templateId);
+    if (template == null) {
+      throw StateError('동작 템플릿을 찾을 수 없습니다.');
+    }
+    return template;
   }
 
   IsarSequenceStepModel _buildDuplicatedStepModel({

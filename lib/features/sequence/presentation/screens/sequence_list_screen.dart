@@ -11,7 +11,9 @@ import '../../domain/entities/sequence.dart';
 import '../args/sequence_route_args.dart';
 
 class SequenceListScreen extends ConsumerStatefulWidget {
-  const SequenceListScreen({super.key});
+  const SequenceListScreen({super.key, this.showBackButton = false});
+
+  final bool showBackButton;
 
   @override
   ConsumerState<SequenceListScreen> createState() => _SequenceListScreenState();
@@ -110,7 +112,10 @@ class _SequenceListScreenState extends ConsumerState<SequenceListScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          child: _SequenceHeader(count: filteredItems.length),
+          child: _SequenceHeader(
+            count: filteredItems.length,
+            showBackButton: widget.showBackButton,
+          ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
@@ -353,9 +358,10 @@ class _SequenceListItem {
 }
 
 class _SequenceHeader extends StatelessWidget {
-  const _SequenceHeader({required this.count});
+  const _SequenceHeader({required this.count, required this.showBackButton});
 
   final int count;
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context) {
@@ -364,6 +370,34 @@ class _SequenceHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (showBackButton) ...[
+          GestureDetector(
+            onTap: () => Navigator.of(context).maybePop(),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                CupertinoIcons.back,
+                size: 18,
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+        ],
         Text(
           '시퀀스',
           style: theme.textTheme.displayLarge?.copyWith(

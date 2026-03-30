@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/init/app_startup_controller.dart';
 import '../../../../app/router/app_routes.dart';
@@ -10,6 +9,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../home/application/home_providers.dart';
 import '../../../pro/application/pro_access.dart';
 import '../../application/sequence_providers.dart';
+import '../../application/sequence_share_text_builder.dart';
 import '../../domain/entities/sequence.dart';
 import '../../domain/entities/sequence_step.dart';
 import '../../domain/enums/side_type.dart';
@@ -85,7 +85,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
   ) {
     final theme = Theme.of(context);
     final cueNoteCount = steps.where(_hasCueNote).length;
-    final shareText = _buildShareText(sequence, steps, shareFormat);
+    final shareText = buildSequenceShareText(sequence, steps, shareFormat);
 
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -115,9 +115,16 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: _ActionButton(
-                  label: '공유',
-                  icon: CupertinoIcons.share,
-                  onTap: () => _openSharePreview(context, shareText),
+                  label: '전체 보기',
+                  icon: CupertinoIcons.list_bullet_below_rectangle,
+                  onTap: () {
+                    Navigator.of(context).pushNamed(
+                      AppRoutes.sequenceFullView,
+                      arguments: SequenceFullViewRouteArgs(
+                        sequenceId: widget.sequenceId,
+                      ),
+                    );
+                  },
                   isPrimary: true,
                 ),
               ),
@@ -200,10 +207,86 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
   }
 
   void _openAddStep(BuildContext context) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) {
+        return CupertinoActionSheet(
+          title: const Text('동작 추가'),
+          message: const Text('직접 작성하거나 저장해둔 즐겨찾기 템플릿에서 가져올 수 있어요.'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                _openNewStepEditor(context);
+              },
+              child: const Text('직접 작성'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
+                await _createStepFromTemplate(context);
+              },
+              child: const Text('즐겨찾기에서 가져오기'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('취소'),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openNewStepEditor(BuildContext context) {
     Navigator.of(context).pushNamed(
       AppRoutes.stepEditor,
       arguments: StepEditorRouteArgs(sequenceId: widget.sequenceId),
     );
+  }
+
+  Future<void> _createStepFromTemplate(BuildContext context) async {
+    final selectedTemplateId = await Navigator.of(
+      context,
+    ).pushNamed<int>(AppRoutes.stepTemplatePicker);
+
+    if (selectedTemplateId == null) {
+      return;
+    }
+
+    try {
+      final newStepId = await ref
+          .read(sequenceRepositoryProvider)
+          .createStepFromTemplate(
+            sequenceId: widget.sequenceId,
+            templateId: selectedTemplateId,
+          );
+
+      _invalidateSequenceCaches();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(this.context).pushNamed(
+        AppRoutes.stepEditor,
+        arguments: StepEditorRouteArgs(
+          sequenceId: widget.sequenceId,
+          stepId: newStepId,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFE89D91),
+          content: Text('템플릿 동작을 추가하지 못했습니다. 다시 시도해주세요.'),
+        ),
+      );
+    }
   }
 
   Future<void> _copyShareText(BuildContext context, String text) async {
@@ -220,41 +303,6 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
         setState(() => _copySuccess = false);
       }
     });
-  }
-
-  Future<void> _openSharePreview(BuildContext context, String shareText) async {
-    final controller = TextEditingController(text: shareText);
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return _SharePreviewBottomSheet(
-          controller: controller,
-          onCopy: () async {
-            await Clipboard.setData(ClipboardData(text: controller.text));
-            await HapticFeedback.lightImpact();
-            if (context.mounted) {
-              Navigator.of(context).pop();
-            }
-            if (mounted) {
-              setState(() => _copySuccess = true);
-              Future<void>.delayed(const Duration(seconds: 2), () {
-                if (mounted) {
-                  setState(() => _copySuccess = false);
-                }
-              });
-            }
-          },
-          onShare: () async {
-            await Share.share(controller.text);
-          },
-        );
-      },
-    );
-
-    controller.dispose();
   }
 
   Future<void> _confirmDelete(BuildContext context, Sequence sequence) async {
@@ -278,13 +326,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
       await ref
           .read(sequenceRepositoryProvider)
           .deleteSequence(widget.sequenceId);
-      ref.invalidate(sequenceByIdProvider(widget.sequenceId));
-      ref.invalidate(sequenceStepsProvider(widget.sequenceId));
-      ref.invalidate(sequenceListProvider);
-      ref.invalidate(sequenceStepCountsProvider);
-      ref.invalidate(favoriteSequenceListProvider);
-      ref.invalidate(recentSequenceListProvider);
-      ref.invalidate(homeOverviewProvider);
+      _invalidateSequenceCaches();
 
       await HapticFeedback.lightImpact();
 
@@ -352,13 +394,7 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
       final duplicatedSequenceId = await ref
           .read(sequenceRepositoryProvider)
           .duplicateSequence(sequence.id);
-      ref.invalidate(sequenceByIdProvider(widget.sequenceId));
-      ref.invalidate(sequenceStepsProvider(widget.sequenceId));
-      ref.invalidate(sequenceListProvider);
-      ref.invalidate(sequenceStepCountsProvider);
-      ref.invalidate(favoriteSequenceListProvider);
-      ref.invalidate(recentSequenceListProvider);
-      ref.invalidate(homeOverviewProvider);
+      _invalidateSequenceCaches();
 
       if (!context.mounted) {
         return;
@@ -379,6 +415,16 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
         ),
       );
     }
+  }
+
+  void _invalidateSequenceCaches() {
+    ref.invalidate(sequenceByIdProvider(widget.sequenceId));
+    ref.invalidate(sequenceStepsProvider(widget.sequenceId));
+    ref.invalidate(sequenceListProvider);
+    ref.invalidate(sequenceStepCountsProvider);
+    ref.invalidate(favoriteSequenceListProvider);
+    ref.invalidate(recentSequenceListProvider);
+    ref.invalidate(homeOverviewProvider);
   }
 
   bool _hasCueNote(SequenceStep step) {
@@ -418,114 +464,6 @@ class _SequenceDetailScreenState extends ConsumerState<SequenceDetailScreen> {
       return '큐잉이 아직 없습니다.';
     }
     return parts.join(' · ');
-  }
-
-  String _buildShareText(
-    Sequence sequence,
-    List<SequenceStep> steps,
-    ShareFormatType format,
-  ) {
-    switch (format) {
-      case ShareFormatType.full:
-        return _buildFullShareText(sequence, steps);
-      case ShareFormatType.cues:
-        return _buildCueShareText(sequence, steps);
-      case ShareFormatType.short:
-        return _buildShortShareText(sequence, steps);
-    }
-  }
-
-  String _buildFullShareText(Sequence sequence, List<SequenceStep> steps) {
-    final buffer = StringBuffer()..writeln(sequence.title);
-
-    if (sequence.tags.isNotEmpty) {
-      buffer.writeln(sequence.tags.join(' · '));
-    }
-
-    buffer.writeln();
-
-    if ((sequence.description ?? '').trim().isNotEmpty) {
-      buffer
-        ..writeln('수업 노트')
-        ..writeln(sequence.description!.trim())
-        ..writeln();
-    }
-
-    for (var index = 0; index < steps.length; index++) {
-      final step = steps[index];
-      buffer.writeln('${index + 1}. ${step.poseName}');
-
-      if (step.preparationCue.trim().isNotEmpty) {
-        buffer.writeln('준비: ${step.preparationCue.trim()}');
-      }
-
-      for (final cue in step.breathCues) {
-        final text = cue.text.trim();
-        if (text.isEmpty) {
-          continue;
-        }
-        buffer.writeln('${cue.breathIndex}호흡: $text');
-      }
-
-      if (step.releaseCue.trim().isNotEmpty) {
-        buffer.writeln('마무리: ${step.releaseCue.trim()}');
-      }
-
-      if ((step.cautionNote ?? '').trim().isNotEmpty) {
-        buffer.writeln('주의: ${step.cautionNote!.trim()}');
-      }
-
-      if ((step.beginnerModificationNote ?? '').trim().isNotEmpty) {
-        buffer.writeln('초급자 수정: ${step.beginnerModificationNote!.trim()}');
-      }
-
-      buffer.writeln();
-    }
-
-    return buffer.toString().trimRight();
-  }
-
-  String _buildCueShareText(Sequence sequence, List<SequenceStep> steps) {
-    final buffer = StringBuffer()
-      ..writeln(sequence.title)
-      ..writeln();
-
-    for (var index = 0; index < steps.length; index++) {
-      final step = steps[index];
-      buffer.writeln('${index + 1}. ${step.poseName}');
-
-      if (step.preparationCue.trim().isNotEmpty) {
-        buffer.writeln('준비: ${step.preparationCue.trim()}');
-      }
-
-      for (final cue in step.breathCues) {
-        final text = cue.text.trim();
-        if (text.isEmpty) {
-          continue;
-        }
-        buffer.writeln('${cue.breathIndex}호흡: $text');
-      }
-
-      if (step.releaseCue.trim().isNotEmpty) {
-        buffer.writeln('마무리: ${step.releaseCue.trim()}');
-      }
-
-      buffer.writeln();
-    }
-
-    return buffer.toString().trimRight();
-  }
-
-  String _buildShortShareText(Sequence sequence, List<SequenceStep> steps) {
-    final buffer = StringBuffer()
-      ..writeln(sequence.title)
-      ..writeln('${steps.length}개 동작');
-
-    for (var index = 0; index < steps.length; index++) {
-      buffer.writeln('${index + 1}. ${steps[index].poseName}');
-    }
-
-    return buffer.toString().trimRight();
   }
 }
 
@@ -1370,106 +1308,6 @@ class _FilledPillButton extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                   color: theme.colorScheme.onPrimary,
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SharePreviewBottomSheet extends StatelessWidget {
-  const _SharePreviewBottomSheet({
-    required this.controller,
-    required this.onCopy,
-    required this.onShare,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onCopy;
-  final VoidCallback onShare;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 32,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '공유 미리보기',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                maxLines: 14,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  fontSize: 15,
-                  height: 1.6,
-                ),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: theme.scaffoldBackgroundColor,
-                  hintText: '공유할 내용을 확인하세요',
-                  contentPadding: const EdgeInsets.all(16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _DialogButton(
-                      label: '닫기',
-                      onTap: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _DialogButton(
-                      label: '복사',
-                      onTap: onCopy,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _DialogButton(
-                      label: '공유',
-                      onTap: onShare,
-                      variant: _DialogButtonVariant.primary,
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
